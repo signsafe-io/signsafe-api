@@ -121,6 +121,15 @@ func (s *ContractService) ListContracts(ctx context.Context, orgID string, page,
 	return contracts, total, nil
 }
 
+// GetContract returns a single contract by ID.
+func (s *ContractService) GetContract(ctx context.Context, contractID string) (*model.Contract, error) {
+	c, err := s.repo.FindContractByID(ctx, contractID)
+	if err != nil {
+		return nil, fmt.Errorf("contractService.GetContract: %w", err)
+	}
+	return c, nil
+}
+
 // ListClauses returns all clauses for a contract.
 func (s *ContractService) ListClauses(ctx context.Context, contractID string) ([]model.Clause, error) {
 	clauses, err := s.repo.ListClausesByContractID(ctx, contractID)
