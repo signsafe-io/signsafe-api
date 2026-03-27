@@ -68,6 +68,11 @@ func (s *AnalysisService) CreateAnalysis(ctx context.Context, contractID, userID
 		return "", fmt.Errorf("analysisService.CreateAnalysis: queue: %w", err)
 	}
 
+	// Release the lock immediately after successful enqueue.
+	// The lock only needed to prevent duplicate in-flight requests;
+	// the AI worker will handle deduplication at the job level.
+	_ = s.cache.Delete(ctx, lockKey)
+
 	return analysisID, nil
 }
 
