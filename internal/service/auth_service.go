@@ -126,6 +126,10 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Token
 		return nil, fmt.Errorf("authService.Login: invalid credentials")
 	}
 
+	if !u.EmailVerified {
+		return nil, fmt.Errorf("authService.Login: email not verified")
+	}
+
 	return s.issueTokens(ctx, u)
 }
 
