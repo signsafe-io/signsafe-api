@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/signsafe-io/signsafe-api/internal/middleware"
 	"github.com/signsafe-io/signsafe-api/internal/service"
@@ -90,7 +91,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	pair, err := h.authSvc.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
-		util.Error(w, http.StatusUnauthorized, "invalid credentials")
+		msg := "invalid credentials"
+		if strings.Contains(err.Error(), "email not verified") {
+			msg = "email not verified"
+		}
+		util.Error(w, http.StatusUnauthorized, msg)
 		return
 	}
 
