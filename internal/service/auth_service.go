@@ -49,7 +49,8 @@ type SignupRequest struct {
 
 // SignupResult holds the result after signup.
 type SignupResult struct {
-	UserID string
+	UserID         string
+	OrganizationID string
 }
 
 // Signup creates a new user account.
@@ -81,12 +82,27 @@ func (s *AuthService) Signup(ctx context.Context, req SignupRequest) (*SignupRes
 		EmailVerifyExpiresAt: &expires,
 	}
 
-	if err := s.userRepo.Create(ctx, u); err != nil {
+	org := &model.Organization{
+		ID:       util.NewID(),
+		Name:     req.FullName + "'s Organization",
+		Plan:     "free",
+		Features: "{}",
+	}
+
+	uo := &model.UserOrganization{
+		ID:             util.NewID(),
+		UserID:         u.ID,
+		OrganizationID: org.ID,
+		Role:           "admin",
+		Permissions:    "[]",
+	}
+
+	if err := s.userRepo.CreateWithOrg(ctx, u, org, uo); err != nil {
 		return nil, fmt.Errorf("authService.Signup: %w", err)
 	}
 
 	// TODO: send verification email (email service not yet implemented)
-	return &SignupResult{UserID: u.ID}, nil
+	return &SignupResult{UserID: u.ID, OrganizationID: org.ID}, nil
 }
 
 // VerifyEmail confirms a user's email address.
@@ -237,8 +253,14 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword stri
 	return nil
 }
 
-// GetMe returns the full user details.
-func (s *AuthService) GetMe(ctx context.Context, userID string) (*model.User, error) {
+// GetMeResult holds user details together with the primary organization.
+type GetMeResult struct {
+	User           *model.User
+	OrganizationID string
+}
+
+// GetMe returns the full user details with their primary organization ID.
+func (s *AuthService) GetMe(ctx context.Context, userID string) (*GetMeResult, error) {
 	u, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("authService.GetMe: %w", err)
@@ -246,7 +268,18 @@ func (s *AuthService) GetMe(ctx context.Context, userID string) (*model.User, er
 	if u == nil {
 		return nil, fmt.Errorf("authService.GetMe: user not found")
 	}
-	return u, nil
+
+	org, err := s.userRepo.FindOrganizationByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("authService.GetMe: find org: %w", err)
+	}
+
+	orgID := ""
+	if org != nil {
+		orgID = org.ID
+	}
+
+	return &GetMeResult{User: u, OrganizationID: orgID}, nil
 }
 
 // --- internal helpers ---

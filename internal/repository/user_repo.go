@@ -185,3 +185,85 @@ func (r *UserRepo) RevokeAllRefreshTokens(ctx context.Context, userID string) er
 	}
 	return nil
 }
+
+// CreateOrganization inserts a new organization.
+func (r *UserRepo) CreateOrganization(ctx context.Context, tx sqlx.ExtContext, org *model.Organization) error {
+	_, err := sqlx.NamedExecContext(ctx, tx, `
+		INSERT INTO organizations (id, name, plan, features, created_at, updated_at)
+		VALUES (:id, :name, :plan, :features, NOW(), NOW())`, org)
+	if err != nil {
+		return fmt.Errorf("userRepo.CreateOrganization: %w", err)
+	}
+	return nil
+}
+
+// CreateUserOrganization inserts a user-organization membership.
+func (r *UserRepo) CreateUserOrganization(ctx context.Context, tx sqlx.ExtContext, uo *model.UserOrganization) error {
+	_, err := sqlx.NamedExecContext(ctx, tx, `
+		INSERT INTO user_organizations (id, user_id, organization_id, role, permissions, joined_at)
+		VALUES (:id, :user_id, :organization_id, :role, :permissions, NOW())`, uo)
+	if err != nil {
+		return fmt.Errorf("userRepo.CreateUserOrganization: %w", err)
+	}
+	return nil
+}
+
+// CreateWithOrg creates a user, their personal organization, and membership in a single transaction.
+func (r *UserRepo) CreateWithOrg(ctx context.Context, u *model.User, org *model.Organization, uo *model.UserOrganization) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("userRepo.CreateWithOrg: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO users (id, email, password_hash, full_name, role,
+		                   email_verified, email_verify_token, email_verify_expires_at,
+		                   created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+		u.ID, u.Email, u.PasswordHash, u.FullName, u.Role,
+		u.EmailVerified, u.EmailVerifyToken, u.EmailVerifyExpiresAt,
+	); err != nil {
+		return fmt.Errorf("userRepo.CreateWithOrg: insert user: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO organizations (id, name, plan, features, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+		org.ID, org.Name, org.Plan, org.Features,
+	); err != nil {
+		return fmt.Errorf("userRepo.CreateWithOrg: insert org: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO user_organizations (id, user_id, organization_id, role, permissions, joined_at)
+		VALUES ($1, $2, $3, $4, $5, NOW())`,
+		uo.ID, uo.UserID, uo.OrganizationID, uo.Role, uo.Permissions,
+	); err != nil {
+		return fmt.Errorf("userRepo.CreateWithOrg: insert user_org: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("userRepo.CreateWithOrg: commit: %w", err)
+	}
+	return nil
+}
+
+// FindOrganizationByUserID returns the first organization a user belongs to.
+func (r *UserRepo) FindOrganizationByUserID(ctx context.Context, userID string) (*model.Organization, error) {
+	var org model.Organization
+	err := r.db.GetContext(ctx, &org, `
+		SELECT o.*
+		FROM organizations o
+		JOIN user_organizations uo ON uo.organization_id = o.id
+		WHERE uo.user_id = $1
+		ORDER BY uo.joined_at ASC
+		LIMIT 1`, userID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("userRepo.FindOrganizationByUserID: %w", err)
+	}
+	return &org, nil
+}
