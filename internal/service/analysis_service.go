@@ -71,8 +71,8 @@ func (s *AnalysisService) CreateAnalysis(ctx context.Context, contractID, userID
 	return analysisID, nil
 }
 
-// GetAnalysis returns a risk analysis with its clause results.
-func (s *AnalysisService) GetAnalysis(ctx context.Context, analysisID string) (*model.RiskAnalysis, []model.ClauseResult, error) {
+// GetAnalysis returns a risk analysis with its clause results (including evidence set IDs).
+func (s *AnalysisService) GetAnalysis(ctx context.Context, analysisID string) (*model.RiskAnalysis, []repository.ClauseResultWithEvidence, error) {
 	a, err := s.analysisRepo.FindAnalysisByID(ctx, analysisID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: %w", err)
@@ -81,7 +81,7 @@ func (s *AnalysisService) GetAnalysis(ctx context.Context, analysisID string) (*
 		return nil, nil, nil
 	}
 
-	results, err := s.analysisRepo.ListClauseResultsByAnalysisID(ctx, analysisID)
+	results, err := s.analysisRepo.ListClauseResultsWithEvidenceByAnalysisID(ctx, analysisID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: clause results: %w", err)
 	}

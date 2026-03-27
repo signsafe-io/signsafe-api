@@ -57,6 +57,30 @@ func (r *AnalysisRepo) ListClauseResultsByAnalysisID(ctx context.Context, analys
 	return results, nil
 }
 
+// ClauseResultWithEvidence extends ClauseResult with an optional evidence set ID.
+type ClauseResultWithEvidence struct {
+	model.ClauseResult
+	EvidenceSetID *string `db:"evidence_set_id" json:"evidenceSetId"`
+}
+
+// ListClauseResultsWithEvidenceByAnalysisID returns clause results joined with
+// their evidence set IDs (NULL when no evidence set exists yet).
+func (r *AnalysisRepo) ListClauseResultsWithEvidenceByAnalysisID(ctx context.Context, analysisID string) ([]ClauseResultWithEvidence, error) {
+	var results []ClauseResultWithEvidence
+	err := r.db.SelectContext(ctx, &results, `
+		SELECT cr.*,
+		       es.id AS evidence_set_id
+		FROM clause_results cr
+		LEFT JOIN evidence_sets es ON es.clause_result_id = cr.id
+		WHERE cr.analysis_id = $1
+		ORDER BY cr.created_at`,
+		analysisID)
+	if err != nil {
+		return nil, fmt.Errorf("analysisRepo.ListClauseResultsWithEvidenceByAnalysisID: %w", err)
+	}
+	return results, nil
+}
+
 // FindClauseResultByID retrieves a clause result by ID.
 func (r *AnalysisRepo) FindClauseResultByID(ctx context.Context, id string) (*model.ClauseResult, error) {
 	var cr model.ClauseResult
