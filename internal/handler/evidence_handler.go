@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/signsafe-io/signsafe-api/internal/service"
@@ -51,8 +50,6 @@ func (h *EvidenceHandler) RetrieveEvidence(w http.ResponseWriter, r *http.Reques
 	if req.TopK == 0 {
 		req.TopK = 5
 	}
-	topKStr := strconv.Itoa(req.TopK)
-	_ = topKStr
 
 	if err := h.evidenceSvc.RetrieveEvidence(r.Context(), evidenceSetID, req.TopK, req.FilterParams); err != nil {
 		util.Error(w, http.StatusInternalServerError, err.Error())
