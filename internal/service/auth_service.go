@@ -7,10 +7,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/signsafe-io/signsafe-api/internal/cache"
+	"github.com/signsafe-io/signsafe-api/internal/email"
 	"github.com/signsafe-io/signsafe-api/internal/model"
 	"github.com/signsafe-io/signsafe-api/internal/repository"
 	"github.com/signsafe-io/signsafe-api/internal/util"
@@ -26,17 +28,19 @@ const (
 
 // AuthService handles user authentication.
 type AuthService struct {
-	userRepo  *repository.UserRepo
-	cache     *cache.Client
-	jwtSecret string
+	userRepo    *repository.UserRepo
+	cache       *cache.Client
+	emailClient *email.Client
+	jwtSecret   string
 }
 
 // NewAuthService creates a new AuthService.
-func NewAuthService(userRepo *repository.UserRepo, cache *cache.Client, jwtSecret string) *AuthService {
+func NewAuthService(userRepo *repository.UserRepo, cache *cache.Client, emailClient *email.Client, jwtSecret string) *AuthService {
 	return &AuthService{
-		userRepo:  userRepo,
-		cache:     cache,
-		jwtSecret: jwtSecret,
+		userRepo:    userRepo,
+		cache:       cache,
+		emailClient: emailClient,
+		jwtSecret:   jwtSecret,
 	}
 }
 
@@ -101,7 +105,12 @@ func (s *AuthService) Signup(ctx context.Context, req SignupRequest) (*SignupRes
 		return nil, fmt.Errorf("authService.Signup: %w", err)
 	}
 
-	// TODO: send verification email (email service not yet implemented)
+	// Send verification email — graceful: log on error, do not fail signup.
+	if err := s.emailClient.SendVerificationEmail(u.Email, verifyToken); err != nil {
+		slog.Warn("authService.Signup: failed to send verification email",
+			"userId", u.ID, "error", err)
+	}
+
 	return &SignupResult{UserID: u.ID, OrganizationID: org.ID}, nil
 }
 
@@ -223,7 +232,12 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string) error {
 		return fmt.Errorf("authService.ForgotPassword: %w", err)
 	}
 
-	// TODO: send reset email
+	// Send reset email — graceful: log on error, do not expose user existence.
+	if err := s.emailClient.SendPasswordResetEmail(u.Email, resetToken); err != nil {
+		slog.Warn("authService.ForgotPassword: failed to send reset email",
+			"userId", u.ID, "error", err)
+	}
+
 	return nil
 }
 

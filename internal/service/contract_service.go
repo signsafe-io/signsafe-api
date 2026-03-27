@@ -147,3 +147,22 @@ func (s *ContractService) GetSnippets(ctx context.Context, contractID string, pa
 	}
 	return clauses, nil
 }
+
+// GetFile retrieves the raw file bytes for a contract from SeaweedFS.
+// Returns the ReadCloser (caller must close it), the mime type, and any error.
+func (s *ContractService) GetFile(ctx context.Context, contractID string) (io.ReadCloser, string, error) {
+	c, err := s.repo.FindContractByID(ctx, contractID)
+	if err != nil {
+		return nil, "", fmt.Errorf("contractService.GetFile: %w", err)
+	}
+	if c == nil {
+		return nil, "", fmt.Errorf("contractService.GetFile: contract not found")
+	}
+
+	body, err := s.storageClient.Get(ctx, c.FilePath)
+	if err != nil {
+		return nil, "", fmt.Errorf("contractService.GetFile: storage: %w", err)
+	}
+
+	return body, c.FileMimeType, nil
+}
