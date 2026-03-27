@@ -1,2 +1,79 @@
 # Architecture Decision Records
 
+## 2026-03-27: HTTP 라우터 — chi 선택
+
+**결정**: `github.com/go-chi/chi/v5`를 HTTP 라우터로 사용한다.
+
+**이유**:
+- 표준 `net/http` 핸들러 인터페이스를 완전히 준수하여 vendor lock-in 없음
+- 미들웨어 체이닝, 그룹 라우팅, URL 파라미터 처리가 깔끔
+- gin 대비 더 가볍고 표준 호환성이 높음
+- 불필요한 추상화 없이 raw `http.Handler`를 그대로 사용 가능
+
+**영향**: 없음 (내부 라우팅 결정)
+
+---
+
+## 2026-03-27: DB 접근 — sqlx 선택
+
+**결정**: `github.com/jmoiron/sqlx`를 사용하며 ORM은 전혀 사용하지 않는다.
+
+**이유**:
+- raw SQL을 그대로 작성하여 DB 쿼리의 완전한 가시성 확보
+- struct 태그(`db:"column_name"`)로 스캔 자동화 지원
+- 아키텍처 원칙(ORM 금지) 준수
+
+**영향**: 없음 (내부 데이터 레이어)
+
+---
+
+## 2026-03-27: ID 전략 — ULID 선택
+
+**결정**: 모든 PK를 `VARCHAR(26)` ULID로 생성한다 (`github.com/oklog/ulid/v2`).
+
+**이유**:
+- UUID와 달리 시간순 정렬 가능 (lexicographic sort = created_at sort)
+- URL-safe, 대소문자 구분 없음
+- DB 인덱스 성능이 UUID v4보다 우수 (monotonic 삽입)
+
+**영향**: signsafe-ai, signsafe-web이 contractId, analysisId 등을 26자 문자열로 기대해야 함
+
+---
+
+## 2026-03-27: 파일 업로드 전략 — 서버 프록시 방식
+
+**결정**: 클라이언트가 signsafe-api에 직접 multipart 업로드하고, API 서버가 SeaweedFS로 스트리밍한다. Presigned URL은 다운로드 전용으로만 사용한다.
+
+**이유**:
+- 업로드 파일 크기 제한, 바이러스 검사, 메타데이터 저장을 서버에서 원자적으로 처리 가능
+- 클라이언트가 스토리지 엔드포인트를 몰라도 됨
+
+**영향**: 업로드 시 signsafe-api가 네트워크 프록시 역할을 함 (메모리 사용 주의)
+
+---
+
+## 2026-03-27: 토큰 전략 — JWT + Opaque Refresh Token
+
+**결정**:
+- Access Token: JWT (HMAC-SHA256), 1시간 만료, Authorization: Bearer 헤더
+- Refresh Token: cryptographically random opaque token, SHA-256 해시를 DB 저장, 30일 만료
+- Refresh Token은 Redis에도 캐시하여 검증 속도 향상
+
+**이유**:
+- Access Token을 stateless JWT로 유지하면 매 요청마다 DB 조회 불필요
+- Refresh Token을 opaque로 하면 즉시 무효화 가능 (JWT는 만료 전 무효화 불가)
+
+**영향**: signsafe-web은 Access Token을 메모리에, Refresh Token을 httpOnly Cookie에 저장해야 함
+
+---
+
+## 2026-03-27: 비동기 작업 패턴 — Job ID 즉시 반환
+
+**결정**: 파싱, 분석 등 시간이 걸리는 모든 작업은 즉시 Job ID를 반환하고 RabbitMQ 큐에 위임한다.
+
+**이유**:
+- HTTP 타임아웃 방지
+- 클라이언트 UX 향상 (진행률 폴링)
+- 실패 시 DLQ에서 재시도 가능
+
+**영향**: 클라이언트는 Job 상태를 폴링해야 함 (1-3초 간격 권장)
