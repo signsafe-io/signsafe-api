@@ -47,8 +47,9 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	util.JSON(w, http.StatusCreated, map[string]interface{}{
-		"userId":  result.UserID,
-		"message": "verification email sent",
+		"userId":         result.UserID,
+		"organizationId": result.OrganizationID,
+		"message":        "verification email sent",
 	})
 }
 
@@ -213,21 +214,23 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.authSvc.GetMe(r.Context(), userID)
+	result, err := h.authSvc.GetMe(r.Context(), userID)
 	if err != nil {
 		util.Error(w, http.StatusInternalServerError, "failed to fetch user")
 		return
 	}
 
+	u := result.User
 	util.JSON(w, http.StatusOK, map[string]interface{}{
-		"id":            u.ID,
-		"email":         u.Email,
-		"fullName":      u.FullName,
-		"role":          u.Role,
-		"emailVerified": u.EmailVerified,
-		"mfaEnabled":    u.MFAEnabled,
-		"createdAt":     u.CreatedAt,
-		"permissions":   defaultPermissions(u.Role),
+		"id":             u.ID,
+		"email":          u.Email,
+		"fullName":       u.FullName,
+		"role":           u.Role,
+		"emailVerified":  u.EmailVerified,
+		"mfaEnabled":     u.MFAEnabled,
+		"createdAt":      u.CreatedAt,
+		"permissions":    defaultPermissions(u.Role),
+		"organizationId": result.OrganizationID,
 	})
 }
 
