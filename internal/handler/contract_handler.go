@@ -176,6 +176,17 @@ func (h *ContractHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := middleware.UserIDFromContext(r.Context())
+	member, err := h.contractSvc.IsOrgMember(r.Context(), userID, c.OrganizationID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to verify organization membership")
+		return
+	}
+	if !member {
+		util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+		return
+	}
+
 	body, contentType, err := h.contractSvc.GetFile(r.Context(), contractID)
 	if err != nil {
 		util.Error(w, http.StatusInternalServerError, "failed to retrieve file")
