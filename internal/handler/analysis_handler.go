@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/signsafe-io/signsafe-api/internal/middleware"
@@ -27,7 +28,11 @@ func (h *AnalysisHandler) CreateAnalysis(w http.ResponseWriter, r *http.Request)
 
 	analysisID, err := h.analysisSvc.CreateAnalysis(r.Context(), contractID, userID)
 	if err != nil {
-		util.Error(w, http.StatusConflict, err.Error())
+		if strings.Contains(err.Error(), "analysis already running") {
+			util.Error(w, http.StatusConflict, "analysis already running for this contract")
+		} else {
+			util.Error(w, http.StatusInternalServerError, "failed to create analysis")
+		}
 		return
 	}
 
