@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -135,6 +137,37 @@ func (h *ContractHandler) ListClauses(w http.ResponseWriter, r *http.Request) {
 		"clauses": clauses,
 		"total":   len(clauses),
 	})
+}
+
+// GetFile handles GET /contracts/{contractId}/file
+func (h *ContractHandler) GetFile(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "contractId")
+
+	c, err := h.contractSvc.GetContract(r.Context(), contractID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to get contract")
+		return
+	}
+	if c == nil {
+		util.Error(w, http.StatusNotFound, "contract not found")
+		return
+	}
+
+	body, contentType, err := h.contractSvc.GetFile(r.Context(), contractID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to retrieve file")
+		return
+	}
+	defer body.Close()
+
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, c.FileName))
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, body)
 }
 
 // GetSnippets handles GET /contracts/{contractId}/snippets

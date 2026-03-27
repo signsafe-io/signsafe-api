@@ -13,6 +13,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/signsafe-io/signsafe-api/internal/cache"
+	"github.com/signsafe-io/signsafe-api/internal/email"
 	"github.com/signsafe-io/signsafe-api/internal/handler"
 	"github.com/signsafe-io/signsafe-api/internal/middleware"
 	"github.com/signsafe-io/signsafe-api/internal/queue"
@@ -33,6 +34,12 @@ func main() {
 	jwtSecret := getEnv("JWT_SECRET", "change-me-in-production")
 	migrationsPath := getEnv("MIGRATIONS_PATH", "./migrations")
 	allowedOrigins := strings.Split(getEnv("ALLOWED_ORIGINS", "*"), ",")
+	smtpHost := getEnv("SMTP_HOST", "")
+	smtpPort := getEnv("SMTP_PORT", "587")
+	smtpUser := getEnv("SMTP_USER", "")
+	smtpPass := getEnv("SMTP_PASS", "")
+	smtpFrom := getEnv("SMTP_FROM", "")
+	appBaseURL := getEnv("APP_BASE_URL", "https://signsafe-web.dsmhs.kr")
 
 	// --- DB ---
 	db, err := repository.NewDB(databaseURL)
@@ -67,9 +74,19 @@ func main() {
 	storageClient := storage.NewClient(s3Endpoint, s3AccessKey, s3SecretKey)
 	slog.Info("storage client created")
 
+	// --- Email ---
+	emailClient := email.NewClient(email.Config{
+		Host:   smtpHost,
+		Port:   smtpPort,
+		User:   smtpUser,
+		Pass:   smtpPass,
+		From:   smtpFrom,
+		AppURL: appBaseURL,
+	})
+
 	// --- Services ---
 	userRepo := repository.NewUserRepo(db)
-	authSvc := service.NewAuthService(userRepo, cacheClient, jwtSecret)
+	authSvc := service.NewAuthService(userRepo, cacheClient, emailClient, jwtSecret)
 
 	contractRepo := repository.NewContractRepo(db)
 	contractSvc := service.NewContractService(contractRepo, queueClient, storageClient)
@@ -121,6 +138,7 @@ func main() {
 			r.Post("/", contractHandler.Upload)
 			r.Route("/{contractId}", func(r chi.Router) {
 				r.Get("/", contractHandler.Get)
+				r.Get("/file", contractHandler.GetFile)
 				r.Get("/clauses", contractHandler.ListClauses)
 				r.Get("/snippets", contractHandler.GetSnippets)
 				r.Post("/risk-analyses", analysisHandler.CreateAnalysis)
