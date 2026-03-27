@@ -15,13 +15,14 @@ import (
 // ContractService handles contract business logic.
 type ContractService struct {
 	repo          *repository.ContractRepo
+	userRepo      *repository.UserRepo
 	queue         *queue.Client
 	storageClient *storage.Client
 }
 
 // NewContractService creates a new ContractService.
-func NewContractService(repo *repository.ContractRepo, q *queue.Client, s *storage.Client) *ContractService {
-	return &ContractService{repo: repo, queue: q, storageClient: s}
+func NewContractService(repo *repository.ContractRepo, userRepo *repository.UserRepo, q *queue.Client, s *storage.Client) *ContractService {
+	return &ContractService{repo: repo, userRepo: userRepo, queue: q, storageClient: s}
 }
 
 // UploadRequest holds the contract upload parameters.
@@ -103,6 +104,15 @@ func (s *ContractService) GetIngestionJob(ctx context.Context, jobID string) (*m
 		return nil, fmt.Errorf("contractService.GetIngestionJob: %w", err)
 	}
 	return job, nil
+}
+
+// IsOrgMember returns true when userID belongs to orgID.
+func (s *ContractService) IsOrgMember(ctx context.Context, userID, orgID string) (bool, error) {
+	member, err := s.userRepo.IsOrgMember(ctx, userID, orgID)
+	if err != nil {
+		return false, fmt.Errorf("contractService.IsOrgMember: %w", err)
+	}
+	return member, nil
 }
 
 // ListContracts returns a paginated list of contracts.

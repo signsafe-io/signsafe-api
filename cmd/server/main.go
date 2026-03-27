@@ -89,7 +89,7 @@ func main() {
 	authSvc := service.NewAuthService(userRepo, cacheClient, emailClient, jwtSecret)
 
 	contractRepo := repository.NewContractRepo(db)
-	contractSvc := service.NewContractService(contractRepo, queueClient, storageClient)
+	contractSvc := service.NewContractService(contractRepo, userRepo, queueClient, storageClient)
 
 	analysisRepo := repository.NewAnalysisRepo(db)
 	analysisSvc := service.NewAnalysisService(analysisRepo, contractRepo, queueClient, cacheClient)
