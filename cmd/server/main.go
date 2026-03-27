@@ -120,6 +120,7 @@ func main() {
 			r.Get("/", contractHandler.List)
 			r.Post("/", contractHandler.Upload)
 			r.Route("/{contractId}", func(r chi.Router) {
+				r.Get("/", contractHandler.Get)
 				r.Get("/clauses", contractHandler.ListClauses)
 				r.Get("/snippets", contractHandler.GetSnippets)
 				r.Post("/risk-analyses", analysisHandler.CreateAnalysis)

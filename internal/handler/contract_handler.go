@@ -93,6 +93,21 @@ func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Get handles GET /contracts/{contractId}
+func (h *ContractHandler) Get(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "contractId")
+	c, err := h.contractSvc.GetContract(r.Context(), contractID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to get contract")
+		return
+	}
+	if c == nil {
+		util.Error(w, http.StatusNotFound, "contract not found")
+		return
+	}
+	util.JSON(w, http.StatusOK, c)
+}
+
 // GetIngestionJob handles GET /ingestion-jobs/{jobId}
 func (h *ContractHandler) GetIngestionJob(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "jobId")
