@@ -42,7 +42,11 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		FullName: req.FullName,
 	})
 	if err != nil {
-		util.Error(w, http.StatusConflict, err.Error())
+		if strings.Contains(err.Error(), "email already registered") {
+			util.Error(w, http.StatusConflict, "email already registered")
+		} else {
+			util.Error(w, http.StatusInternalServerError, "signup failed")
+		}
 		return
 	}
 
