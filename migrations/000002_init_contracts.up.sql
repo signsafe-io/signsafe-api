@@ -7,7 +7,7 @@ CREATE TABLE contracts (
     uploaded_by     VARCHAR(26)  NOT NULL REFERENCES users(id),
     title           VARCHAR(500) NOT NULL,
     status          VARCHAR(50)  NOT NULL DEFAULT 'uploaded',
-    -- status: uploaded | processing | processed | failed
+    -- status: uploaded | processing | ready | failed
     file_path       VARCHAR(1000) NOT NULL,
     file_name       VARCHAR(500) NOT NULL,
     file_size       BIGINT       NOT NULL DEFAULT 0,
