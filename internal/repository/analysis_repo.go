@@ -32,6 +32,23 @@ func (r *AnalysisRepo) CreateAnalysis(ctx context.Context, a *model.RiskAnalysis
 	return nil
 }
 
+// FindLatestAnalysisByContractID retrieves the most recent risk analysis for a contract.
+func (r *AnalysisRepo) FindLatestAnalysisByContractID(ctx context.Context, contractID string) (*model.RiskAnalysis, error) {
+	var a model.RiskAnalysis
+	err := r.db.GetContext(ctx, &a, `
+		SELECT * FROM risk_analyses
+		WHERE contract_id = $1
+		ORDER BY created_at DESC
+		LIMIT 1`, contractID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("analysisRepo.FindLatestAnalysisByContractID: %w", err)
+	}
+	return &a, nil
+}
+
 // FindAnalysisByID retrieves a risk analysis by ID.
 func (r *AnalysisRepo) FindAnalysisByID(ctx context.Context, id string) (*model.RiskAnalysis, error) {
 	var a model.RiskAnalysis

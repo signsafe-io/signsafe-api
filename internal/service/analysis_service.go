@@ -35,6 +35,24 @@ func NewAnalysisService(
 	}
 }
 
+// GetLatestAnalysis returns the most recent analysis for a contract with its clause results.
+func (s *AnalysisService) GetLatestAnalysis(ctx context.Context, contractID string) (*model.RiskAnalysis, []repository.ClauseResultWithEvidence, error) {
+	a, err := s.analysisRepo.FindLatestAnalysisByContractID(ctx, contractID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: %w", err)
+	}
+	if a == nil {
+		return nil, nil, nil
+	}
+
+	results, err := s.analysisRepo.ListClauseResultsWithEvidenceByAnalysisID(ctx, a.ID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: clause results: %w", err)
+	}
+
+	return a, results, nil
+}
+
 // CreateAnalysis creates a risk analysis and enqueues the job.
 func (s *AnalysisService) CreateAnalysis(ctx context.Context, contractID, userID string) (string, error) {
 	// Distributed lock to prevent duplicate analyses.

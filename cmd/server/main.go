@@ -141,6 +141,7 @@ func main() {
 				r.Get("/file", contractHandler.GetFile)
 				r.Get("/clauses", contractHandler.ListClauses)
 				r.Get("/snippets", contractHandler.GetSnippets)
+				r.Get("/risk-analyses", analysisHandler.GetLatestAnalysis)
 				r.Post("/risk-analyses", analysisHandler.CreateAnalysis)
 			})
 		})
