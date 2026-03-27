@@ -13,9 +13,11 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/signsafe-io/signsafe-api/internal/cache"
+	"github.com/signsafe-io/signsafe-api/internal/handler"
 	"github.com/signsafe-io/signsafe-api/internal/middleware"
 	"github.com/signsafe-io/signsafe-api/internal/queue"
 	"github.com/signsafe-io/signsafe-api/internal/repository"
+	"github.com/signsafe-io/signsafe-api/internal/service"
 	"github.com/signsafe-io/signsafe-api/internal/storage"
 )
 
@@ -65,6 +67,29 @@ func main() {
 	storageClient := storage.NewClient(s3Endpoint, s3AccessKey, s3SecretKey)
 	slog.Info("storage client created")
 
+	// --- Services ---
+	userRepo := repository.NewUserRepo(db)
+	authSvc := service.NewAuthService(userRepo, cacheClient, jwtSecret)
+
+	contractRepo := repository.NewContractRepo(db)
+	contractSvc := service.NewContractService(contractRepo, queueClient, storageClient)
+
+	analysisRepo := repository.NewAnalysisRepo(db)
+	analysisSvc := service.NewAnalysisService(analysisRepo, contractRepo, queueClient, cacheClient)
+
+	evidenceRepo := repository.NewEvidenceRepo(db)
+	evidenceSvc := service.NewEvidenceService(evidenceRepo, queueClient)
+
+	auditRepo := repository.NewAuditRepo(db)
+	auditSvc := service.NewAuditService(auditRepo)
+
+	// --- Handlers ---
+	authHandler := handler.NewAuthHandler(authSvc)
+	contractHandler := handler.NewContractHandler(contractSvc)
+	analysisHandler := handler.NewAnalysisHandler(analysisSvc)
+	evidenceHandler := handler.NewEvidenceHandler(evidenceSvc)
+	auditHandler := handler.NewAuditHandler(auditSvc)
+
 	// --- Router ---
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Recoverer)
@@ -76,53 +101,47 @@ func main() {
 
 	// Auth routes (no auth middleware)
 	r.Route("/auth", func(r chi.Router) {
-		r.Post("/signup", notImplemented)
-		r.Post("/verify-email", notImplemented)
-		r.Post("/login", notImplemented)
-		r.Post("/refresh", notImplemented)
-		r.Post("/logout", notImplemented)
-		r.Post("/password/forgot", notImplemented)
-		r.Post("/password/reset", notImplemented)
+		r.Post("/signup", authHandler.Signup)
+		r.Post("/verify-email", authHandler.VerifyEmail)
+		r.Post("/login", authHandler.Login)
+		r.Post("/refresh", authHandler.Refresh)
+		r.Post("/logout", authHandler.Logout)
+		r.Post("/password/forgot", authHandler.ForgotPassword)
+		r.Post("/password/reset", authHandler.ResetPassword)
 	})
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Authenticate(jwtSecret))
 
-		r.Get("/users/me", notImplemented)
+		r.Get("/users/me", authHandler.GetMe)
 
 		r.Route("/contracts", func(r chi.Router) {
-			r.Get("/", notImplemented)
-			r.Post("/", notImplemented)
+			r.Get("/", contractHandler.List)
+			r.Post("/", contractHandler.Upload)
 			r.Route("/{contractId}", func(r chi.Router) {
-				r.Get("/clauses", notImplemented)
-				r.Get("/snippets", notImplemented)
-				r.Post("/risk-analyses", notImplemented)
+				r.Get("/clauses", contractHandler.ListClauses)
+				r.Get("/snippets", contractHandler.GetSnippets)
+				r.Post("/risk-analyses", analysisHandler.CreateAnalysis)
 			})
 		})
 
 		r.Route("/ingestion-jobs/{jobId}", func(r chi.Router) {
-			r.Get("/", notImplemented)
+			r.Get("/", contractHandler.GetIngestionJob)
 		})
 
 		r.Route("/risk-analyses/{analysisId}", func(r chi.Router) {
-			r.Get("/", notImplemented)
-			r.Post("/overrides", notImplemented)
+			r.Get("/", analysisHandler.GetAnalysis)
+			r.Post("/overrides", analysisHandler.CreateOverride)
 		})
 
 		r.Route("/evidence-sets/{evidenceSetId}", func(r chi.Router) {
-			r.Get("/", notImplemented)
-			r.Post("/retrieve", notImplemented)
+			r.Get("/", evidenceHandler.GetEvidenceSet)
+			r.Post("/retrieve", evidenceHandler.RetrieveEvidence)
 		})
 
-		r.Post("/audit-events", notImplemented)
+		r.Post("/audit-events", auditHandler.CreateAuditEvent)
 	})
-
-	// Log dependency references to avoid unused variable errors.
-	_ = db
-	_ = cacheClient
-	_ = queueClient
-	_ = storageClient
 
 	addr := fmt.Sprintf(":%s", port)
 	slog.Info("server starting", "addr", addr)
@@ -135,12 +154,6 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
-func notImplemented(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "not implemented"})
 }
 
 func getEnv(key, fallback string) string {
