@@ -21,6 +21,26 @@ func NewAnalysisHandler(analysisSvc *service.AnalysisService) *AnalysisHandler {
 	return &AnalysisHandler{analysisSvc: analysisSvc}
 }
 
+// GetLatestAnalysis handles GET /contracts/{contractId}/risk-analyses
+func (h *AnalysisHandler) GetLatestAnalysis(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "contractId")
+
+	analysis, results, err := h.analysisSvc.GetLatestAnalysis(r.Context(), contractID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to get analysis")
+		return
+	}
+	if analysis == nil {
+		util.Error(w, http.StatusNotFound, "no analysis found for this contract")
+		return
+	}
+
+	util.JSON(w, http.StatusOK, map[string]interface{}{
+		"analysis":      analysis,
+		"clauseResults": results,
+	})
+}
+
 // CreateAnalysis handles POST /contracts/{contractId}/risk-analyses
 func (h *AnalysisHandler) CreateAnalysis(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "contractId")
