@@ -249,6 +249,20 @@ func (r *UserRepo) CreateWithOrg(ctx context.Context, u *model.User, org *model.
 	return nil
 }
 
+// IsOrgMember returns true when the user belongs to the given organization.
+func (r *UserRepo) IsOrgMember(ctx context.Context, userID, orgID string) (bool, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `
+		SELECT COUNT(*)
+		FROM user_organizations
+		WHERE user_id = $1 AND organization_id = $2`,
+		userID, orgID)
+	if err != nil {
+		return false, fmt.Errorf("userRepo.IsOrgMember: %w", err)
+	}
+	return count > 0, nil
+}
+
 // FindOrganizationByUserID returns the first organization a user belongs to.
 func (r *UserRepo) FindOrganizationByUserID(ctx context.Context, userID string) (*model.Organization, error) {
 	var org model.Organization

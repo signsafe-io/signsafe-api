@@ -78,6 +78,17 @@ func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := middleware.UserIDFromContext(r.Context())
+	member, err := h.contractSvc.IsOrgMember(r.Context(), userID, orgID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to verify organization membership")
+		return
+	}
+	if !member {
+		util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+		return
+	}
+
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
 
@@ -107,6 +118,18 @@ func (h *ContractHandler) Get(w http.ResponseWriter, r *http.Request) {
 		util.Error(w, http.StatusNotFound, "contract not found")
 		return
 	}
+
+	userID := middleware.UserIDFromContext(r.Context())
+	member, err := h.contractSvc.IsOrgMember(r.Context(), userID, c.OrganizationID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to verify organization membership")
+		return
+	}
+	if !member {
+		util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+		return
+	}
+
 	util.JSON(w, http.StatusOK, c)
 }
 
