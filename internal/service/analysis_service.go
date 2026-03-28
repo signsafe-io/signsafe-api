@@ -16,6 +16,7 @@ import (
 type AnalysisService struct {
 	analysisRepo *repository.AnalysisRepo
 	contractRepo *repository.ContractRepo
+	userRepo     *repository.UserRepo
 	queue        *queue.Client
 	cache        *cache.Client
 }
@@ -24,19 +25,38 @@ type AnalysisService struct {
 func NewAnalysisService(
 	analysisRepo *repository.AnalysisRepo,
 	contractRepo *repository.ContractRepo,
+	userRepo *repository.UserRepo,
 	q *queue.Client,
 	c *cache.Client,
 ) *AnalysisService {
 	return &AnalysisService{
 		analysisRepo: analysisRepo,
 		contractRepo: contractRepo,
+		userRepo:     userRepo,
 		queue:        q,
 		cache:        c,
 	}
 }
 
 // GetLatestAnalysis returns the most recent analysis for a contract with its clause results.
-func (s *AnalysisService) GetLatestAnalysis(ctx context.Context, contractID string) (*model.RiskAnalysis, []repository.ClauseResultWithEvidence, error) {
+// userID is used to verify that the caller is a member of the contract's organization.
+func (s *AnalysisService) GetLatestAnalysis(ctx context.Context, contractID, userID string) (*model.RiskAnalysis, []repository.ClauseResultWithEvidence, error) {
+	// Verify the contract exists and the caller is a member of its org.
+	c, err := s.contractRepo.FindContractByID(ctx, contractID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: find contract: %w", err)
+	}
+	if c == nil {
+		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: contract not found")
+	}
+	member, err := s.userRepo.IsOrgMember(ctx, userID, c.OrganizationID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: check membership: %w", err)
+	}
+	if !member {
+		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: access denied")
+	}
+
 	a, err := s.analysisRepo.FindLatestAnalysisByContractID(ctx, contractID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: %w", err)
@@ -95,13 +115,30 @@ func (s *AnalysisService) CreateAnalysis(ctx context.Context, contractID, userID
 }
 
 // GetAnalysis returns a risk analysis with its clause results (including evidence set IDs).
-func (s *AnalysisService) GetAnalysis(ctx context.Context, analysisID string) (*model.RiskAnalysis, []repository.ClauseResultWithEvidence, error) {
+// userID is used to verify that the caller is a member of the analysis's contract organization.
+func (s *AnalysisService) GetAnalysis(ctx context.Context, analysisID, userID string) (*model.RiskAnalysis, []repository.ClauseResultWithEvidence, error) {
 	a, err := s.analysisRepo.FindAnalysisByID(ctx, analysisID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: %w", err)
 	}
 	if a == nil {
 		return nil, nil, nil
+	}
+
+	// Verify the caller belongs to the contract's org.
+	c, err := s.contractRepo.FindContractByID(ctx, a.ContractID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: find contract: %w", err)
+	}
+	if c == nil {
+		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: contract not found")
+	}
+	member, err := s.userRepo.IsOrgMember(ctx, userID, c.OrganizationID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: check membership: %w", err)
+	}
+	if !member {
+		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: access denied")
 	}
 
 	results, err := s.analysisRepo.ListClauseResultsWithEvidenceByAnalysisID(ctx, analysisID)
