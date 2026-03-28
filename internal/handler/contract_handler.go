@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -61,11 +62,10 @@ func (h *ContractHandler) logAudit(r *http.Request, action string, targetType, t
 	if userID != "" {
 		req.ActorID = &userID
 	}
-	// Fire-and-forget: use a background context so the audit write is not
+	// Fire-and-forget: use context.Background() so the audit write is not
 	// cancelled when the HTTP request context is done.
 	go func() {
-		ctx := r.Context()
-		_, _ = h.auditSvc.CreateAuditEvent(ctx, req)
+		_, _ = h.auditSvc.CreateAuditEvent(context.Background(), req)
 	}()
 }
 

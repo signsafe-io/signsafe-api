@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -43,8 +44,7 @@ func (h *AnalysisHandler) logAudit(r *http.Request, action string, targetType, t
 		req.ActorID = &userID
 	}
 	go func() {
-		ctx := r.Context()
-		_, _ = h.auditSvc.CreateAuditEvent(ctx, req)
+		_, _ = h.auditSvc.CreateAuditEvent(context.Background(), req)
 	}()
 }
 
