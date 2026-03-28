@@ -93,7 +93,7 @@ func main() {
 	contractSvc := service.NewContractService(contractRepo, userRepo, queueClient, storageClient)
 
 	analysisRepo := repository.NewAnalysisRepo(db)
-	analysisSvc := service.NewAnalysisService(analysisRepo, contractRepo, queueClient, cacheClient)
+	analysisSvc := service.NewAnalysisService(analysisRepo, contractRepo, userRepo, queueClient, cacheClient)
 
 	evidenceRepo := repository.NewEvidenceRepo(db)
 	evidenceSvc := service.NewEvidenceService(evidenceRepo, queueClient)

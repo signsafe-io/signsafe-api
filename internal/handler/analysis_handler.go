@@ -24,10 +24,18 @@ func NewAnalysisHandler(analysisSvc *service.AnalysisService) *AnalysisHandler {
 // GetLatestAnalysis handles GET /contracts/{contractId}/risk-analyses
 func (h *AnalysisHandler) GetLatestAnalysis(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "contractId")
+	userID := middleware.UserIDFromContext(r.Context())
 
-	analysis, results, err := h.analysisSvc.GetLatestAnalysis(r.Context(), contractID)
+	analysis, results, err := h.analysisSvc.GetLatestAnalysis(r.Context(), contractID, userID)
 	if err != nil {
-		util.Error(w, http.StatusInternalServerError, "failed to get analysis")
+		switch {
+		case strings.Contains(err.Error(), "contract not found"):
+			util.Error(w, http.StatusNotFound, "contract not found")
+		case strings.Contains(err.Error(), "access denied"):
+			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+		default:
+			util.Error(w, http.StatusInternalServerError, "failed to get analysis")
+		}
 		return
 	}
 	if analysis == nil {
@@ -65,10 +73,16 @@ func (h *AnalysisHandler) CreateAnalysis(w http.ResponseWriter, r *http.Request)
 // GetAnalysis handles GET /risk-analyses/{analysisId}
 func (h *AnalysisHandler) GetAnalysis(w http.ResponseWriter, r *http.Request) {
 	analysisID := chi.URLParam(r, "analysisId")
+	userID := middleware.UserIDFromContext(r.Context())
 
-	analysis, results, err := h.analysisSvc.GetAnalysis(r.Context(), analysisID)
+	analysis, results, err := h.analysisSvc.GetAnalysis(r.Context(), analysisID, userID)
 	if err != nil {
-		util.Error(w, http.StatusInternalServerError, "failed to get analysis")
+		switch {
+		case strings.Contains(err.Error(), "access denied"):
+			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+		default:
+			util.Error(w, http.StatusInternalServerError, "failed to get analysis")
+		}
 		return
 	}
 	if analysis == nil {
