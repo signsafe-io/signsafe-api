@@ -13,12 +13,14 @@ type contextKey string
 const (
 	ContextKeyUserID   contextKey = "userID"
 	ContextKeyUserRole contextKey = "userRole"
+	ContextKeyOrgID    contextKey = "orgID"
 )
 
 // Claims holds the JWT payload.
 type Claims struct {
 	UserID string `json:"userId"`
 	Role   string `json:"role"`
+	OrgID  string `json:"orgId"`
 	jwt.RegisteredClaims
 }
 
@@ -53,6 +55,7 @@ func Authenticate(jwtSecret string) func(http.Handler) http.Handler {
 
 			ctx := context.WithValue(r.Context(), ContextKeyUserID, claims.UserID)
 			ctx = context.WithValue(ctx, ContextKeyUserRole, claims.Role)
+			ctx = context.WithValue(ctx, ContextKeyOrgID, claims.OrgID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -67,6 +70,13 @@ func UserIDFromContext(ctx context.Context) string {
 // UserRoleFromContext extracts the user role from the request context.
 func UserRoleFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(ContextKeyUserRole).(string)
+	return v
+}
+
+// OrgIDFromContext extracts the organization ID embedded in the JWT from the request context.
+// Returns an empty string for tokens issued before this field was added.
+func OrgIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(ContextKeyOrgID).(string)
 	return v
 }
 
