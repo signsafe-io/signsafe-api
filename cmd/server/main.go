@@ -103,8 +103,8 @@ func main() {
 
 	// --- Handlers ---
 	authHandler := handler.NewAuthHandler(authSvc)
-	contractHandler := handler.NewContractHandler(contractSvc)
-	analysisHandler := handler.NewAnalysisHandler(analysisSvc)
+	contractHandler := handler.NewContractHandler(contractSvc, auditSvc)
+	analysisHandler := handler.NewAnalysisHandler(analysisSvc, auditSvc)
 	evidenceHandler := handler.NewEvidenceHandler(evidenceSvc)
 	auditHandler := handler.NewAuditHandler(auditSvc)
 

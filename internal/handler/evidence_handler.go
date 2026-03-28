@@ -68,7 +68,7 @@ func (h *EvidenceHandler) RetrieveEvidence(w http.ResponseWriter, r *http.Reques
 			util.Error(w, http.StatusNotFound, "evidence set not found")
 			return
 		}
-		util.Error(w, http.StatusInternalServerError, err.Error())
+		util.Error(w, http.StatusInternalServerError, "failed to queue evidence retrieval")
 		return
 	}
 

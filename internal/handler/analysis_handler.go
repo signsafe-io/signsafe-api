@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"strings"
 
@@ -14,11 +15,37 @@ import (
 // AnalysisHandler handles risk analysis HTTP requests.
 type AnalysisHandler struct {
 	analysisSvc *service.AnalysisService
+	auditSvc    *service.AuditService
 }
 
 // NewAnalysisHandler creates a new AnalysisHandler.
-func NewAnalysisHandler(analysisSvc *service.AnalysisService) *AnalysisHandler {
-	return &AnalysisHandler{analysisSvc: analysisSvc}
+func NewAnalysisHandler(analysisSvc *service.AnalysisService, auditSvc *service.AuditService) *AnalysisHandler {
+	return &AnalysisHandler{analysisSvc: analysisSvc, auditSvc: auditSvc}
+}
+
+// logAudit records an audit event in a best-effort, non-blocking way.
+func (h *AnalysisHandler) logAudit(r *http.Request, action string, targetType, targetID *string) {
+	ipAddr := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		ipAddr = host
+	}
+	userAgent := r.UserAgent()
+	userID := middleware.UserIDFromContext(r.Context())
+
+	req := service.CreateAuditEventRequest{
+		Action:     action,
+		TargetType: targetType,
+		TargetID:   targetID,
+		IPAddress:  &ipAddr,
+		UserAgent:  &userAgent,
+	}
+	if userID != "" {
+		req.ActorID = &userID
+	}
+	go func() {
+		ctx := r.Context()
+		_, _ = h.auditSvc.CreateAuditEvent(ctx, req)
+	}()
 }
 
 // GetLatestAnalysis handles GET /contracts/{contractId}/risk-analyses
@@ -68,6 +95,9 @@ func (h *AnalysisHandler) CreateAnalysis(w http.ResponseWriter, r *http.Request)
 		}
 		return
 	}
+
+	targetType := "contract"
+	h.logAudit(r, "ANALYSIS_REQUESTED", &targetType, &contractID)
 
 	util.JSON(w, http.StatusAccepted, map[string]string{
 		"analysisId": analysisID,
@@ -138,6 +168,9 @@ func (h *AnalysisHandler) CreateOverride(w http.ResponseWriter, r *http.Request)
 		}
 		return
 	}
+
+	targetType := "clause_result"
+	h.logAudit(r, "RISK_OVERRIDDEN", &targetType, &req.ClauseResultID)
 
 	util.JSON(w, http.StatusCreated, override)
 }
