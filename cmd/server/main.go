@@ -116,6 +116,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(chimiddleware.RequestID) // must run before Logger so GetReqID works
 	r.Use(chimiddleware.Recoverer)
+	r.Use(middleware.SecurityHeaders)
 	r.Use(middleware.Logger)
 	r.Use(middleware.CORS(allowedOrigins))
 
