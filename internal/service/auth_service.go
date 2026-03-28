@@ -159,6 +159,8 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Token
 }
 
 // Refresh rotates a refresh token and issues a new access token.
+// If a previously revoked token is presented, all sessions for the owning user
+// are invalidated (refresh token reuse / theft detection).
 func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*TokenPair, error) {
 	tokenHash := hashToken(rawRefreshToken)
 
@@ -169,7 +171,9 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Tok
 		return nil, fmt.Errorf("authService.Refresh: cache: %w", err)
 	}
 	if cached == "revoked" {
-		return nil, fmt.Errorf("authService.Refresh: token revoked")
+		// Token was already used — possible theft. Revoke all sessions for this user.
+		s.invalidateFamilyFromHash(ctx, tokenHash)
+		return nil, fmt.Errorf("authService.Refresh: token already used — all sessions revoked")
 	}
 
 	rt, err := s.userRepo.FindRefreshToken(ctx, tokenHash)
@@ -177,6 +181,9 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Tok
 		return nil, fmt.Errorf("authService.Refresh: %w", err)
 	}
 	if rt == nil {
+		// Token not found in DB at all — could be expired or already revoked.
+		// Look it up without filters to detect reuse of previously valid tokens.
+		s.invalidateFamilyFromHash(ctx, tokenHash)
 		return nil, fmt.Errorf("authService.Refresh: invalid or expired token")
 	}
 
@@ -333,6 +340,25 @@ func (s *AuthService) issueTokens(ctx context.Context, u *model.User) (*TokenPai
 		RefreshToken: rawRefresh,
 		ExpiresAt:    expiresAt,
 	}, nil
+}
+
+// invalidateFamilyFromHash looks up the user who owns the given token hash
+// (including revoked tokens) and revokes all their refresh tokens.
+// This is a best-effort operation; errors are logged but not propagated.
+func (s *AuthService) invalidateFamilyFromHash(ctx context.Context, tokenHash string) {
+	rt, err := s.userRepo.FindRefreshTokenByHash(ctx, tokenHash)
+	if err != nil || rt == nil {
+		// Token not in DB at all — nothing we can do.
+		slog.Warn("authService: token reuse detected but owner not found", "tokenHash", tokenHash[:8])
+		return
+	}
+	if err := s.userRepo.RevokeAllRefreshTokens(ctx, rt.UserID); err != nil {
+		slog.Warn("authService: failed to revoke all tokens on reuse detection",
+			"userId", rt.UserID, "error", err)
+		return
+	}
+	slog.Warn("authService: refresh token reuse detected — all sessions revoked",
+		"userId", rt.UserID)
 }
 
 // generateOpaqueToken returns a cryptographically random hex token (32 bytes = 64 chars).
