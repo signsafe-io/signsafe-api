@@ -100,11 +100,32 @@ func (s *ContractService) Upload(ctx context.Context, req UploadRequest) (*Uploa
 }
 
 // GetIngestionJob returns the current status of an ingestion job.
-func (s *ContractService) GetIngestionJob(ctx context.Context, jobID string) (*model.IngestionJob, error) {
+// requestedBy must be a member of the job's contract organization.
+func (s *ContractService) GetIngestionJob(ctx context.Context, jobID, requestedBy string) (*model.IngestionJob, error) {
 	job, err := s.repo.FindIngestionJobByID(ctx, jobID)
 	if err != nil {
 		return nil, fmt.Errorf("contractService.GetIngestionJob: %w", err)
 	}
+	if job == nil {
+		return nil, nil
+	}
+
+	// Verify the caller belongs to the job's contract organization.
+	c, err := s.repo.FindContractByID(ctx, job.ContractID)
+	if err != nil {
+		return nil, fmt.Errorf("contractService.GetIngestionJob: find contract: %w", err)
+	}
+	if c == nil {
+		return nil, fmt.Errorf("contractService.GetIngestionJob: contract not found")
+	}
+	member, err := s.userRepo.IsOrgMember(ctx, requestedBy, c.OrganizationID)
+	if err != nil {
+		return nil, fmt.Errorf("contractService.GetIngestionJob: check membership: %w", err)
+	}
+	if !member {
+		return nil, fmt.Errorf("contractService.GetIngestionJob: access denied")
+	}
+
 	return job, nil
 }
 

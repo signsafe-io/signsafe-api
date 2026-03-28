@@ -3,8 +3,10 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/signsafe-io/signsafe-api/internal/middleware"
 	"github.com/signsafe-io/signsafe-api/internal/service"
 	"github.com/signsafe-io/signsafe-api/internal/util"
 )
@@ -22,9 +24,14 @@ func NewEvidenceHandler(evidenceSvc *service.EvidenceService) *EvidenceHandler {
 // GetEvidenceSet handles GET /evidence-sets/{evidenceSetId}
 func (h *EvidenceHandler) GetEvidenceSet(w http.ResponseWriter, r *http.Request) {
 	evidenceSetID := chi.URLParam(r, "evidenceSetId")
+	userID := middleware.UserIDFromContext(r.Context())
 
-	es, err := h.evidenceSvc.GetEvidenceSet(r.Context(), evidenceSetID)
+	es, err := h.evidenceSvc.GetEvidenceSet(r.Context(), evidenceSetID, userID)
 	if err != nil {
+		if strings.Contains(err.Error(), "access denied") {
+			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+			return
+		}
 		util.Error(w, http.StatusInternalServerError, "failed to get evidence set")
 		return
 	}
@@ -38,6 +45,7 @@ func (h *EvidenceHandler) GetEvidenceSet(w http.ResponseWriter, r *http.Request)
 // RetrieveEvidence handles POST /evidence-sets/{evidenceSetId}/retrieve
 func (h *EvidenceHandler) RetrieveEvidence(w http.ResponseWriter, r *http.Request) {
 	evidenceSetID := chi.URLParam(r, "evidenceSetId")
+	userID := middleware.UserIDFromContext(r.Context())
 
 	var req struct {
 		TopK         int    `json:"topK"`
@@ -51,7 +59,15 @@ func (h *EvidenceHandler) RetrieveEvidence(w http.ResponseWriter, r *http.Reques
 		req.TopK = 5
 	}
 
-	if err := h.evidenceSvc.RetrieveEvidence(r.Context(), evidenceSetID, req.TopK, req.FilterParams); err != nil {
+	if err := h.evidenceSvc.RetrieveEvidence(r.Context(), evidenceSetID, req.TopK, req.FilterParams, userID); err != nil {
+		if strings.Contains(err.Error(), "access denied") {
+			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+			return
+		}
+		if strings.Contains(err.Error(), "evidence set not found") {
+			util.Error(w, http.StatusNotFound, "evidence set not found")
+			return
+		}
 		util.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}

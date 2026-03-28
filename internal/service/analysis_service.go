@@ -74,7 +74,24 @@ func (s *AnalysisService) GetLatestAnalysis(ctx context.Context, contractID, use
 }
 
 // CreateAnalysis creates a risk analysis and enqueues the job.
+// userID must be a member of the contract's organization.
 func (s *AnalysisService) CreateAnalysis(ctx context.Context, contractID, userID string) (string, error) {
+	// Verify the contract exists and the caller is a member of its org.
+	c, err := s.contractRepo.FindContractByID(ctx, contractID)
+	if err != nil {
+		return "", fmt.Errorf("analysisService.CreateAnalysis: find contract: %w", err)
+	}
+	if c == nil {
+		return "", fmt.Errorf("analysisService.CreateAnalysis: contract not found")
+	}
+	member, err := s.userRepo.IsOrgMember(ctx, userID, c.OrganizationID)
+	if err != nil {
+		return "", fmt.Errorf("analysisService.CreateAnalysis: check membership: %w", err)
+	}
+	if !member {
+		return "", fmt.Errorf("analysisService.CreateAnalysis: access denied")
+	}
+
 	// Distributed lock to prevent duplicate analyses.
 	lockKey := fmt.Sprintf("analysis:lock:%s", contractID)
 	acquired, err := s.cache.SetNX(ctx, lockKey, userID, 10*time.Minute)
@@ -157,7 +174,8 @@ var allowedRiskLevels = map[string]struct{}{
 }
 
 // CreateOverride stores a risk override for a clause result.
-// It verifies that clauseResultID belongs to the given analysisID.
+// It verifies that clauseResultID belongs to the given analysisID and
+// that the caller is a member of the analysis's contract organization.
 func (s *AnalysisService) CreateOverride(ctx context.Context, analysisID, clauseResultID, newRiskLevel, reason, userID string) (*model.RiskOverride, error) {
 	if _, ok := allowedRiskLevels[newRiskLevel]; !ok {
 		return nil, fmt.Errorf("analysisService.CreateOverride: invalid risk level %q (must be HIGH, MEDIUM, or LOW)", newRiskLevel)
@@ -170,6 +188,22 @@ func (s *AnalysisService) CreateOverride(ctx context.Context, analysisID, clause
 	}
 	if a == nil {
 		return nil, fmt.Errorf("analysisService.CreateOverride: analysis not found")
+	}
+
+	// Verify the caller belongs to the contract's org.
+	c, err := s.contractRepo.FindContractByID(ctx, a.ContractID)
+	if err != nil {
+		return nil, fmt.Errorf("analysisService.CreateOverride: find contract: %w", err)
+	}
+	if c == nil {
+		return nil, fmt.Errorf("analysisService.CreateOverride: contract not found")
+	}
+	member, err := s.userRepo.IsOrgMember(ctx, userID, c.OrganizationID)
+	if err != nil {
+		return nil, fmt.Errorf("analysisService.CreateOverride: check membership: %w", err)
+	}
+	if !member {
+		return nil, fmt.Errorf("analysisService.CreateOverride: access denied")
 	}
 
 	cr, err := s.analysisRepo.FindClauseResultByID(ctx, clauseResultID)

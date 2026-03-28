@@ -56,9 +56,14 @@ func (h *AnalysisHandler) CreateAnalysis(w http.ResponseWriter, r *http.Request)
 
 	analysisID, err := h.analysisSvc.CreateAnalysis(r.Context(), contractID, userID)
 	if err != nil {
-		if strings.Contains(err.Error(), "analysis already running") {
+		switch {
+		case strings.Contains(err.Error(), "analysis already running"):
 			util.Error(w, http.StatusConflict, "analysis already running for this contract")
-		} else {
+		case strings.Contains(err.Error(), "contract not found"):
+			util.Error(w, http.StatusNotFound, "contract not found")
+		case strings.Contains(err.Error(), "access denied"):
+			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+		default:
 			util.Error(w, http.StatusInternalServerError, "failed to create analysis")
 		}
 		return
@@ -126,6 +131,8 @@ func (h *AnalysisHandler) CreateOverride(w http.ResponseWriter, r *http.Request)
 			util.Error(w, http.StatusNotFound, "clause result not found")
 		case strings.Contains(err.Error(), "does not belong to analysis"):
 			util.Error(w, http.StatusForbidden, "clause result does not belong to this analysis")
+		case strings.Contains(err.Error(), "access denied"):
+			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
 		default:
 			util.Error(w, http.StatusInternalServerError, "failed to create override")
 		}

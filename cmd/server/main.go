@@ -96,7 +96,7 @@ func main() {
 	analysisSvc := service.NewAnalysisService(analysisRepo, contractRepo, userRepo, queueClient, cacheClient)
 
 	evidenceRepo := repository.NewEvidenceRepo(db)
-	evidenceSvc := service.NewEvidenceService(evidenceRepo, queueClient)
+	evidenceSvc := service.NewEvidenceService(evidenceRepo, analysisRepo, contractRepo, userRepo, queueClient)
 
 	auditRepo := repository.NewAuditRepo(db)
 	auditSvc := service.NewAuditService(auditRepo)
