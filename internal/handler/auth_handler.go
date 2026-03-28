@@ -35,6 +35,10 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		util.Error(w, http.StatusBadRequest, "email, password, and fullName are required")
 		return
 	}
+	if len(req.Password) < 8 {
+		util.Error(w, http.StatusBadRequest, "password must be at least 8 characters")
+		return
+	}
 
 	result, err := h.authSvc.Signup(r.Context(), service.SignupRequest{
 		Email:    req.Email,
@@ -199,6 +203,10 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Token == "" || req.NewPassword == "" {
 		util.Error(w, http.StatusBadRequest, "token and newPassword are required")
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		util.Error(w, http.StatusBadRequest, "password must be at least 8 characters")
 		return
 	}
 

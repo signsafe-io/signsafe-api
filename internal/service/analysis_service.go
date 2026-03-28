@@ -112,14 +112,40 @@ func (s *AnalysisService) GetAnalysis(ctx context.Context, analysisID string) (*
 	return a, results, nil
 }
 
+// allowedRiskLevels is the set of valid values for newRiskLevel in an override.
+var allowedRiskLevels = map[string]struct{}{
+	"HIGH":   {},
+	"MEDIUM": {},
+	"LOW":    {},
+}
+
 // CreateOverride stores a risk override for a clause result.
+// It verifies that clauseResultID belongs to the given analysisID.
 func (s *AnalysisService) CreateOverride(ctx context.Context, analysisID, clauseResultID, newRiskLevel, reason, userID string) (*model.RiskOverride, error) {
+	if _, ok := allowedRiskLevels[newRiskLevel]; !ok {
+		return nil, fmt.Errorf("analysisService.CreateOverride: invalid risk level %q (must be HIGH, MEDIUM, or LOW)", newRiskLevel)
+	}
+
+	// Verify the analysis exists.
+	a, err := s.analysisRepo.FindAnalysisByID(ctx, analysisID)
+	if err != nil {
+		return nil, fmt.Errorf("analysisService.CreateOverride: find analysis: %w", err)
+	}
+	if a == nil {
+		return nil, fmt.Errorf("analysisService.CreateOverride: analysis not found")
+	}
+
 	cr, err := s.analysisRepo.FindClauseResultByID(ctx, clauseResultID)
 	if err != nil {
 		return nil, fmt.Errorf("analysisService.CreateOverride: find clause result: %w", err)
 	}
 	if cr == nil {
 		return nil, fmt.Errorf("analysisService.CreateOverride: clause result not found")
+	}
+
+	// Verify the clause result belongs to the specified analysis.
+	if cr.AnalysisID != analysisID {
+		return nil, fmt.Errorf("analysisService.CreateOverride: clause result does not belong to analysis")
 	}
 
 	// Always use the AI-assessed risk level as the original, regardless of prior overrides.

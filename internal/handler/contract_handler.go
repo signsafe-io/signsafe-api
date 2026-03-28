@@ -61,7 +61,7 @@ func (h *ContractHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		File:           file,
 	})
 	if err != nil {
-		util.Error(w, http.StatusInternalServerError, "upload failed: "+err.Error())
+		util.Error(w, http.StatusInternalServerError, "upload failed")
 		return
 	}
 
