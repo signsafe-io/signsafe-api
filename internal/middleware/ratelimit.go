@@ -12,7 +12,7 @@ import (
 
 // RateLimiter returns a middleware that limits requests per IP per endpoint.
 // limit is the maximum number of requests allowed per window.
-// window is the duration of the sliding window.
+// window is the duration of the fixed window (TTL set once on key creation).
 // On Redis failure the middleware fails open (allows the request).
 func RateLimiter(cacheClient *cache.Client, limit int64, window time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

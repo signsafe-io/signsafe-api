@@ -63,12 +63,16 @@ func (c *Client) SetNX(ctx context.Context, key string, value interface{}, ttl t
 	return ok, nil
 }
 
-// Incr atomically increments a counter key and sets its TTL on first creation.
+// Incr atomically increments a counter key and sets its TTL only on first creation.
+// Using ExpireNX ensures the TTL is set once (when the key is new) and not reset
+// on subsequent calls — this implements a true fixed-window rate limit.
 // Returns the new counter value.
 func (c *Client) Incr(ctx context.Context, key string, ttl time.Duration) (int64, error) {
 	pipe := c.rdb.Pipeline()
 	incrCmd := pipe.Incr(ctx, key)
-	pipe.Expire(ctx, key, ttl)
+	// ExpireNX sets the TTL only if the key has no expiry (i.e., it was just created).
+	// This prevents the window from being extended on every request.
+	pipe.ExpireNX(ctx, key, ttl)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return 0, fmt.Errorf("cache.Incr: %w", err)
 	}
