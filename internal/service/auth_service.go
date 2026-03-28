@@ -67,7 +67,7 @@ func (s *AuthService) Signup(ctx context.Context, req SignupRequest) (*SignupRes
 		return nil, fmt.Errorf("authService.Signup: email already registered")
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
 	if err != nil {
 		return nil, fmt.Errorf("authService.Signup: hash password: %w", err)
 	}
@@ -258,7 +258,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword stri
 		return fmt.Errorf("authService.ResetPassword: invalid or expired token")
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), 12)
 	if err != nil {
 		return fmt.Errorf("authService.ResetPassword: hash: %w", err)
 	}
