@@ -122,11 +122,8 @@ func (s *AnalysisService) CreateOverride(ctx context.Context, analysisID, clause
 		return nil, fmt.Errorf("analysisService.CreateOverride: clause result not found")
 	}
 
-	// Use the current effective risk level as original.
+	// Always use the AI-assessed risk level as the original, regardless of prior overrides.
 	originalLevel := cr.RiskLevel
-	if cr.OverriddenRiskLevel != nil {
-		originalLevel = *cr.OverriddenRiskLevel
-	}
 
 	o := &model.RiskOverride{
 		ID:                util.NewID(),
