@@ -4,10 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/signsafe-io/signsafe-api/internal/model"
 )
+
+// ContractUpdate holds the optional fields that can be patched on a contract.
+// Only non-nil fields are written to the DB.
+type ContractUpdate struct {
+	Title        *string
+	Tags         *string
+	Parties      *string
+	Language     *string
+	ContractType *string
+	SignedAt     *time.Time
+	ExpiresAt    *time.Time
+}
 
 // ContractRepo handles DB operations for contracts, ingestion jobs, and clauses.
 type ContractRepo struct {
@@ -124,6 +138,74 @@ func (r *ContractRepo) DeleteContract(ctx context.Context, contractID, orgID str
 		return fmt.Errorf("contractRepo.DeleteContract: not found or access denied")
 	}
 	return nil
+}
+
+// UpdateContract applies a partial update to a contract.
+// Only non-nil fields in updates are written; at least one field must be set.
+func (r *ContractRepo) UpdateContract(ctx context.Context, contractID string, updates ContractUpdate) (*model.Contract, error) {
+	setClauses := make([]string, 0, 8)
+	args := make([]interface{}, 0, 9)
+	argIdx := 1
+
+	if updates.Title != nil {
+		setClauses = append(setClauses, fmt.Sprintf("title = $%d", argIdx))
+		args = append(args, *updates.Title)
+		argIdx++
+	}
+	if updates.Tags != nil {
+		setClauses = append(setClauses, fmt.Sprintf("tags = $%d", argIdx))
+		args = append(args, *updates.Tags)
+		argIdx++
+	}
+	if updates.Parties != nil {
+		setClauses = append(setClauses, fmt.Sprintf("parties = $%d", argIdx))
+		args = append(args, *updates.Parties)
+		argIdx++
+	}
+	if updates.Language != nil {
+		setClauses = append(setClauses, fmt.Sprintf("language = $%d", argIdx))
+		args = append(args, *updates.Language)
+		argIdx++
+	}
+	if updates.ContractType != nil {
+		setClauses = append(setClauses, fmt.Sprintf("contract_type = $%d", argIdx))
+		args = append(args, *updates.ContractType)
+		argIdx++
+	}
+	if updates.SignedAt != nil {
+		setClauses = append(setClauses, fmt.Sprintf("signed_at = $%d", argIdx))
+		args = append(args, *updates.SignedAt)
+		argIdx++
+	}
+	if updates.ExpiresAt != nil {
+		setClauses = append(setClauses, fmt.Sprintf("expires_at = $%d", argIdx))
+		args = append(args, *updates.ExpiresAt)
+		argIdx++
+	}
+
+	if len(setClauses) == 0 {
+		return nil, fmt.Errorf("contractRepo.UpdateContract: no fields to update")
+	}
+
+	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argIdx))
+	args = append(args, time.Now())
+	argIdx++
+
+	args = append(args, contractID)
+	query := fmt.Sprintf(
+		`UPDATE contracts SET %s WHERE id = $%d RETURNING *`,
+		strings.Join(setClauses, ", "),
+		argIdx,
+	)
+
+	var c model.Contract
+	if err := r.db.GetContext(ctx, &c, query, args...); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("contractRepo.UpdateContract: not found")
+		}
+		return nil, fmt.Errorf("contractRepo.UpdateContract: %w", err)
+	}
+	return &c, nil
 }
 
 // GetSnippet returns clauses that overlap with the given page and offset range.

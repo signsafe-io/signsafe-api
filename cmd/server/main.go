@@ -139,6 +139,7 @@ func main() {
 			r.Route("/{contractId}", func(r chi.Router) {
 				r.Get("/", contractHandler.Get)
 				r.Delete("/", contractHandler.Delete)
+				r.Patch("/", contractHandler.Update)
 				r.Get("/file", contractHandler.GetFile)
 				r.Get("/clauses", contractHandler.ListClauses)
 				r.Get("/snippets", contractHandler.GetSnippets)
