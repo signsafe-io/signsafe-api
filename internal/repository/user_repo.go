@@ -166,6 +166,22 @@ func (r *UserRepo) FindRefreshToken(ctx context.Context, tokenHash string) (*mod
 	return &rt, nil
 }
 
+// FindRefreshTokenByHash retrieves any refresh token by hash (including revoked ones).
+// Used to detect refresh token reuse attacks and identify the token owner.
+func (r *UserRepo) FindRefreshTokenByHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error) {
+	var rt model.RefreshToken
+	err := r.db.GetContext(ctx, &rt, `
+		SELECT * FROM refresh_tokens WHERE token_hash = $1`,
+		tokenHash)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("userRepo.FindRefreshTokenByHash: %w", err)
+	}
+	return &rt, nil
+}
+
 // RevokeRefreshToken marks a refresh token as revoked.
 func (r *UserRepo) RevokeRefreshToken(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, `
