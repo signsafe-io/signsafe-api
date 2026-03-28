@@ -79,6 +79,14 @@ func (c *Client) Incr(ctx context.Context, key string, ttl time.Duration) (int64
 	return incrCmd.Val(), nil
 }
 
+// Ping checks that the Redis connection is alive.
+func (c *Client) Ping(ctx context.Context) error {
+	if err := c.rdb.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("cache.Ping: %w", err)
+	}
+	return nil
+}
+
 // Close shuts down the Redis client.
 func (c *Client) Close() error {
 	return c.rdb.Close()

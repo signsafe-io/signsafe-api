@@ -80,6 +80,17 @@ func (c *Client) Publish(ctx context.Context, queue string, v interface{}) error
 	return nil
 }
 
+// Ping checks that the RabbitMQ connection and channel are open.
+func (c *Client) Ping() error {
+	if c.conn == nil || c.conn.IsClosed() {
+		return fmt.Errorf("queue.Ping: connection is closed")
+	}
+	if c.channel == nil {
+		return fmt.Errorf("queue.Ping: channel is nil")
+	}
+	return nil
+}
+
 // Close cleans up channel and connection.
 func (c *Client) Close() {
 	if c.channel != nil {
