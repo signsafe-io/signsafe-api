@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -117,10 +118,13 @@ func main() {
 	r.Get("/health", healthHandler)
 
 	// Auth routes (no auth middleware)
+	// Rate limiters: login/signup are brute-force targets.
+	loginLimiter := middleware.RateLimiter(cacheClient, 10, 1*time.Minute)
+	signupLimiter := middleware.RateLimiter(cacheClient, 5, 1*time.Minute)
 	r.Route("/auth", func(r chi.Router) {
-		r.Post("/signup", authHandler.Signup)
+		r.With(signupLimiter).Post("/signup", authHandler.Signup)
 		r.Post("/verify-email", authHandler.VerifyEmail)
-		r.Post("/login", authHandler.Login)
+		r.With(loginLimiter).Post("/login", authHandler.Login)
 		r.Post("/refresh", authHandler.Refresh)
 		r.Post("/logout", authHandler.Logout)
 		r.Post("/password/forgot", authHandler.ForgotPassword)
