@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 
@@ -31,11 +32,41 @@ var allowedMimeTypes = map[string]struct{}{
 // ContractHandler handles contract-related HTTP requests.
 type ContractHandler struct {
 	contractSvc *service.ContractService
+	auditSvc    *service.AuditService
 }
 
 // NewContractHandler creates a new ContractHandler.
-func NewContractHandler(contractSvc *service.ContractService) *ContractHandler {
-	return &ContractHandler{contractSvc: contractSvc}
+func NewContractHandler(contractSvc *service.ContractService, auditSvc *service.AuditService) *ContractHandler {
+	return &ContractHandler{contractSvc: contractSvc, auditSvc: auditSvc}
+}
+
+// logAudit records an audit event in a best-effort, non-blocking way.
+// A failure to write the audit log never blocks or fails the original request.
+func (h *ContractHandler) logAudit(r *http.Request, action string, targetType, targetID, orgID *string) {
+	ipAddr := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		ipAddr = host
+	}
+	userAgent := r.UserAgent()
+	userID := middleware.UserIDFromContext(r.Context())
+
+	req := service.CreateAuditEventRequest{
+		Action:         action,
+		TargetType:     targetType,
+		TargetID:       targetID,
+		OrganizationID: orgID,
+		IPAddress:      &ipAddr,
+		UserAgent:      &userAgent,
+	}
+	if userID != "" {
+		req.ActorID = &userID
+	}
+	// Fire-and-forget: use a background context so the audit write is not
+	// cancelled when the HTTP request context is done.
+	go func() {
+		ctx := r.Context()
+		_, _ = h.auditSvc.CreateAuditEvent(ctx, req)
+	}()
 }
 
 // Upload handles POST /contracts
@@ -280,6 +311,9 @@ func (h *ContractHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	targetType := "contract"
+	h.logAudit(r, "CONTRACT_DELETED", &targetType, &contractID, nil)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -327,6 +361,10 @@ func (h *ContractHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	targetType := "contract"
+	orgID := updated.OrganizationID
+	h.logAudit(r, "CONTRACT_UPDATED", &targetType, &contractID, &orgID)
 
 	util.JSON(w, http.StatusOK, updated)
 }
