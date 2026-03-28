@@ -103,7 +103,18 @@ func (h *AnalysisHandler) CreateOverride(w http.ResponseWriter, r *http.Request)
 
 	override, err := h.analysisSvc.CreateOverride(r.Context(), analysisID, req.ClauseResultID, req.NewRiskLevel, req.Reason, userID)
 	if err != nil {
-		util.Error(w, http.StatusInternalServerError, err.Error())
+		switch {
+		case strings.Contains(err.Error(), "invalid risk level"):
+			util.Error(w, http.StatusBadRequest, "invalid risk level: must be HIGH, MEDIUM, or LOW")
+		case strings.Contains(err.Error(), "analysis not found"):
+			util.Error(w, http.StatusNotFound, "analysis not found")
+		case strings.Contains(err.Error(), "clause result not found"):
+			util.Error(w, http.StatusNotFound, "clause result not found")
+		case strings.Contains(err.Error(), "does not belong to analysis"):
+			util.Error(w, http.StatusForbidden, "clause result does not belong to this analysis")
+		default:
+			util.Error(w, http.StatusInternalServerError, "failed to create override")
+		}
 		return
 	}
 
