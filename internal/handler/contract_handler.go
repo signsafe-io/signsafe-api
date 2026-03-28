@@ -137,8 +137,14 @@ func (h *ContractHandler) Get(w http.ResponseWriter, r *http.Request) {
 // GetIngestionJob handles GET /ingestion-jobs/{jobId}
 func (h *ContractHandler) GetIngestionJob(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "jobId")
-	job, err := h.contractSvc.GetIngestionJob(r.Context(), jobID)
+	userID := middleware.UserIDFromContext(r.Context())
+
+	job, err := h.contractSvc.GetIngestionJob(r.Context(), jobID, userID)
 	if err != nil {
+		if err.Error() == "contractService.GetIngestionJob: access denied" {
+			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+			return
+		}
 		util.Error(w, http.StatusInternalServerError, "failed to get ingestion job")
 		return
 	}
