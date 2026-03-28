@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,18 @@ import (
 )
 
 const maxUploadSize = 50 * 1024 * 1024 // 50 MB
+
+// allowedMimeTypes is the set of file types accepted for contract upload.
+// Validated against actual magic bytes, not the client-supplied Content-Type.
+var allowedMimeTypes = map[string]struct{}{
+	"application/pdf": {},
+	// DOCX, XLSX, PPTX share the same ZIP magic bytes (PK\x03\x04).
+	// net/http.DetectContentType returns "application/zip" for these;
+	// we accept it and let the parser deal with the specific Office format.
+	"application/zip": {},
+	// Older .doc / .xls / .ppt (Compound Document)
+	"application/octet-stream": {},
+}
 
 // ContractHandler handles contract-related HTTP requests.
 type ContractHandler struct {
@@ -39,6 +52,23 @@ func (h *ContractHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	// Read the first 512 bytes to detect the true MIME type from magic bytes.
+	// This is independent of the client-supplied Content-Type header.
+	sniff := make([]byte, 512)
+	n, err := file.Read(sniff)
+	if err != nil && err != io.EOF {
+		util.Error(w, http.StatusBadRequest, "failed to read file")
+		return
+	}
+	detectedType := http.DetectContentType(sniff[:n])
+	if _, ok := allowedMimeTypes[detectedType]; !ok {
+		util.Error(w, http.StatusUnsupportedMediaType,
+			"unsupported file type: only PDF and Office documents are accepted")
+		return
+	}
+	// Reconstruct the reader so the full file is available for upload.
+	fullFile := io.MultiReader(bytes.NewReader(sniff[:n]), file)
+
 	title := r.FormValue("title")
 	if title == "" {
 		title = header.Filename
@@ -57,8 +87,8 @@ func (h *ContractHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		Title:          title,
 		FileName:       header.Filename,
 		FileSize:       header.Size,
-		FileMimeType:   header.Header.Get("Content-Type"),
-		File:           file,
+		FileMimeType:   detectedType,
+		File:           fullFile,
 	})
 	if err != nil {
 		util.Error(w, http.StatusInternalServerError, "upload failed")
