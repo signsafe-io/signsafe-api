@@ -138,6 +138,7 @@ func main() {
 			r.Post("/", contractHandler.Upload)
 			r.Route("/{contractId}", func(r chi.Router) {
 				r.Get("/", contractHandler.Get)
+				r.Delete("/", contractHandler.Delete)
 				r.Get("/file", contractHandler.GetFile)
 				r.Get("/clauses", contractHandler.ListClauses)
 				r.Get("/snippets", contractHandler.GetSnippets)
