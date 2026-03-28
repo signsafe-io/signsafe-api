@@ -158,6 +158,37 @@ func (s *ContractService) GetSnippets(ctx context.Context, contractID string, pa
 	return clauses, nil
 }
 
+// DeleteContract deletes a contract and its associated storage file.
+// requestedBy must be a member of the contract's organization.
+func (s *ContractService) DeleteContract(ctx context.Context, contractID, requestedBy string) error {
+	c, err := s.repo.FindContractByID(ctx, contractID)
+	if err != nil {
+		return fmt.Errorf("contractService.DeleteContract: %w", err)
+	}
+	if c == nil {
+		return fmt.Errorf("contractService.DeleteContract: contract not found")
+	}
+
+	member, err := s.userRepo.IsOrgMember(ctx, requestedBy, c.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("contractService.DeleteContract: check membership: %w", err)
+	}
+	if !member {
+		return fmt.Errorf("contractService.DeleteContract: access denied")
+	}
+
+	// Delete from storage (best-effort; DB row is the authoritative record).
+	if err := s.storageClient.Delete(ctx, c.FilePath); err != nil {
+		return fmt.Errorf("contractService.DeleteContract: storage: %w", err)
+	}
+
+	if err := s.repo.DeleteContract(ctx, contractID, c.OrganizationID); err != nil {
+		return fmt.Errorf("contractService.DeleteContract: db: %w", err)
+	}
+
+	return nil
+}
+
 // GetFile retrieves the raw file bytes for a contract from SeaweedFS.
 // Returns the ReadCloser (caller must close it), the mime type, and any error.
 func (s *ContractService) GetFile(ctx context.Context, contractID string) (io.ReadCloser, string, error) {

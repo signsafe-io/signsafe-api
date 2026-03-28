@@ -107,6 +107,25 @@ func (r *ContractRepo) ListClausesByContractID(ctx context.Context, contractID s
 	return clauses, nil
 }
 
+// DeleteContract removes a contract by ID scoped to the organization.
+// Cascade deletes on clauses, ingestion_jobs, and risk_analyses are handled by the DB.
+func (r *ContractRepo) DeleteContract(ctx context.Context, contractID, orgID string) error {
+	result, err := r.db.ExecContext(ctx,
+		`DELETE FROM contracts WHERE id = $1 AND organization_id = $2`,
+		contractID, orgID)
+	if err != nil {
+		return fmt.Errorf("contractRepo.DeleteContract: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("contractRepo.DeleteContract rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("contractRepo.DeleteContract: not found or access denied")
+	}
+	return nil
+}
+
 // GetSnippet returns clauses that overlap with the given page and offset range.
 func (r *ContractRepo) GetSnippet(ctx context.Context, contractID string, page, startOffset, endOffset int) ([]model.Clause, error) {
 	var clauses []model.Clause

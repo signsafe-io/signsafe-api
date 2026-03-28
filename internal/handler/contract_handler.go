@@ -204,6 +204,26 @@ func (h *ContractHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, body)
 }
 
+// Delete handles DELETE /contracts/{contractId}
+func (h *ContractHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "contractId")
+	userID := middleware.UserIDFromContext(r.Context())
+
+	if err := h.contractSvc.DeleteContract(r.Context(), contractID, userID); err != nil {
+		switch {
+		case err.Error() == "contractService.DeleteContract: contract not found":
+			util.Error(w, http.StatusNotFound, "contract not found")
+		case err.Error() == "contractService.DeleteContract: access denied":
+			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+		default:
+			util.Error(w, http.StatusInternalServerError, "failed to delete contract: "+err.Error())
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // GetSnippets handles GET /contracts/{contractId}/snippets
 func (h *ContractHandler) GetSnippets(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "contractId")
