@@ -307,9 +307,21 @@ func (s *AuthService) GetMe(ctx context.Context, userID string) (*GetMeResult, e
 
 func (s *AuthService) issueTokens(ctx context.Context, u *model.User) (*TokenPair, error) {
 	expiresAt := time.Now().Add(accessTokenTTL)
+
+	// Embed orgId so handlers can avoid a DB round-trip for the common case.
+	// The IDOR checks in each handler still verify membership explicitly.
+	var orgID string
+	org, err := s.userRepo.FindOrganizationByUserID(ctx, u.ID)
+	if err != nil {
+		slog.Warn("issueTokens: could not look up org for user", "userId", u.ID, "err", err)
+	} else if org != nil {
+		orgID = org.ID
+	}
+
 	claims := jwt.MapClaims{
 		"userId": u.ID,
 		"role":   u.Role,
+		"orgId":  orgID,
 		"exp":    expiresAt.Unix(),
 		"iat":    time.Now().Unix(),
 	}
