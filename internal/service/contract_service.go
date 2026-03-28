@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/signsafe-io/signsafe-api/internal/model"
@@ -241,8 +242,10 @@ func (s *ContractService) DeleteContract(ctx context.Context, contractID, reques
 	}
 
 	// Delete from storage (best-effort; DB row is the authoritative record).
+	// Storage failures are logged but must not block DB deletion.
 	if err := s.storageClient.Delete(ctx, c.FilePath); err != nil {
-		return fmt.Errorf("contractService.DeleteContract: storage: %w", err)
+		slog.Warn("contractService.DeleteContract: storage delete failed (best-effort)",
+			"contractId", contractID, "filePath", c.FilePath, "error", err)
 	}
 
 	if err := s.repo.DeleteContract(ctx, contractID, c.OrganizationID); err != nil {

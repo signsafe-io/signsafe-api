@@ -215,7 +215,7 @@ func (r *ContractRepo) GetSnippet(ctx context.Context, contractID string, page, 
 		SELECT * FROM clauses
 		WHERE contract_id = $1
 		  AND page_start <= $2 AND page_end >= $2
-		  AND start_offset <= $4 AND end_offset >= $3
+		  AND start_offset <= $3 AND end_offset >= $4
 		ORDER BY clause_index`,
 		contractID, page, startOffset, endOffset)
 	if err != nil {
