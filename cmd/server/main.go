@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -114,8 +118,8 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.CORS(allowedOrigins))
 
-	// Health check (no auth)
-	r.Get("/health", healthHandler)
+	// Health check (no auth) — probes DB, Redis, RabbitMQ connectivity.
+	r.Get("/health", makeHealthHandler(db, cacheClient, queueClient))
 
 	// Auth routes (no auth middleware)
 	// Rate limiters: login/signup are brute-force targets.
@@ -169,17 +173,91 @@ func main() {
 		r.Post("/audit-events", auditHandler.CreateAuditEvent)
 	})
 
-	addr := fmt.Sprintf(":%s", port)
-	slog.Info("server starting", "addr", addr)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatalf("server error: %v", err)
+	// --- Server with graceful shutdown ---
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", port),
+		Handler: r,
 	}
+
+	// Listen for OS signals in a goroutine.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	go func() {
+		slog.Info("server starting", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	// Block until signal received.
+	<-ctx.Done()
+	slog.Info("shutdown signal received, draining in-flight requests")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("graceful shutdown error: %v", err)
+	}
+	slog.Info("server shut down cleanly")
 }
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+// dbPinger is satisfied by *sqlx.DB (used for health check only).
+type dbPinger interface {
+	PingContext(ctx context.Context) error
+}
+
+func makeHealthHandler(db dbPinger, cacheClient *cache.Client, queueClient *queue.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+
+		type componentStatus struct {
+			Status string `json:"status"`
+			Error  string `json:"error,omitempty"`
+		}
+
+		components := map[string]componentStatus{}
+		healthy := true
+
+		// DB ping.
+		if err := db.PingContext(ctx); err != nil {
+			components["db"] = componentStatus{Status: "unhealthy", Error: err.Error()}
+			healthy = false
+		} else {
+			components["db"] = componentStatus{Status: "ok"}
+		}
+
+		// Redis ping.
+		if err := cacheClient.Ping(ctx); err != nil {
+			components["redis"] = componentStatus{Status: "unhealthy", Error: err.Error()}
+			healthy = false
+		} else {
+			components["redis"] = componentStatus{Status: "ok"}
+		}
+
+		// RabbitMQ connection check.
+		if err := queueClient.Ping(); err != nil {
+			components["rabbitmq"] = componentStatus{Status: "unhealthy", Error: err.Error()}
+			healthy = false
+		} else {
+			components["rabbitmq"] = componentStatus{Status: "ok"}
+		}
+
+		status := "ok"
+		code := http.StatusOK
+		if !healthy {
+			status = "degraded"
+			code = http.StatusServiceUnavailable
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(code)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":     status,
+			"components": components,
+		})
+	}
 }
 
 func getEnv(key, fallback string) string {
