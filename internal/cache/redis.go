@@ -63,6 +63,18 @@ func (c *Client) SetNX(ctx context.Context, key string, value interface{}, ttl t
 	return ok, nil
 }
 
+// Incr atomically increments a counter key and sets its TTL on first creation.
+// Returns the new counter value.
+func (c *Client) Incr(ctx context.Context, key string, ttl time.Duration) (int64, error) {
+	pipe := c.rdb.Pipeline()
+	incrCmd := pipe.Incr(ctx, key)
+	pipe.Expire(ctx, key, ttl)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return 0, fmt.Errorf("cache.Incr: %w", err)
+	}
+	return incrCmd.Val(), nil
+}
+
 // Close shuts down the Redis client.
 func (c *Client) Close() error {
 	return c.rdb.Close()
