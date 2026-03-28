@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -21,6 +22,11 @@ func NewDB(databaseURL string) (*sqlx.DB, error) {
 	}
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
+	// Recycle connections after 30 minutes to prevent stale connections
+	// that have exceeded the PostgreSQL server's idle timeout (default: 600s).
+	db.SetConnMaxLifetime(30 * time.Minute)
+	// Close idle connections that have been idle for more than 5 minutes.
+	db.SetConnMaxIdleTime(5 * time.Minute)
 	return db, nil
 }
 
