@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/signsafe-io/signsafe-api/internal/model"
 	"github.com/signsafe-io/signsafe-api/internal/queue"
@@ -156,6 +157,68 @@ func (s *ContractService) GetSnippets(ctx context.Context, contractID string, pa
 		return nil, fmt.Errorf("contractService.GetSnippets: %w", err)
 	}
 	return clauses, nil
+}
+
+// UpdateContractRequest holds the optional fields for a partial contract update.
+type UpdateContractRequest struct {
+	Title        *string
+	Tags         *string
+	Parties      *string
+	Language     *string
+	ContractType *string
+	SignedAt     *string
+	ExpiresAt    *string
+}
+
+// UpdateContract applies a partial update to a contract.
+// requestedBy must be a member of the contract's organization.
+func (s *ContractService) UpdateContract(ctx context.Context, contractID, requestedBy string, req UpdateContractRequest) (*model.Contract, error) {
+	c, err := s.repo.FindContractByID(ctx, contractID)
+	if err != nil {
+		return nil, fmt.Errorf("contractService.UpdateContract: %w", err)
+	}
+	if c == nil {
+		return nil, fmt.Errorf("contractService.UpdateContract: contract not found")
+	}
+
+	member, err := s.userRepo.IsOrgMember(ctx, requestedBy, c.OrganizationID)
+	if err != nil {
+		return nil, fmt.Errorf("contractService.UpdateContract: check membership: %w", err)
+	}
+	if !member {
+		return nil, fmt.Errorf("contractService.UpdateContract: access denied")
+	}
+
+	updates := repository.ContractUpdate{
+		Title:        req.Title,
+		Tags:         req.Tags,
+		Parties:      req.Parties,
+		Language:     req.Language,
+		ContractType: req.ContractType,
+	}
+
+	if req.SignedAt != nil {
+		t, err := time.Parse(time.RFC3339, *req.SignedAt)
+		if err != nil {
+			return nil, fmt.Errorf("contractService.UpdateContract: invalid signedAt: %w", err)
+		}
+		updates.SignedAt = &t
+	}
+
+	if req.ExpiresAt != nil {
+		t, err := time.Parse(time.RFC3339, *req.ExpiresAt)
+		if err != nil {
+			return nil, fmt.Errorf("contractService.UpdateContract: invalid expiresAt: %w", err)
+		}
+		updates.ExpiresAt = &t
+	}
+
+	updated, err := s.repo.UpdateContract(ctx, contractID, updates)
+	if err != nil {
+		return nil, fmt.Errorf("contractService.UpdateContract: db: %w", err)
+	}
+
+	return updated, nil
 }
 
 // DeleteContract deletes a contract and its associated storage file.

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -151,6 +152,28 @@ func (h *ContractHandler) GetIngestionJob(w http.ResponseWriter, r *http.Request
 // ListClauses handles GET /contracts/{contractId}/clauses
 func (h *ContractHandler) ListClauses(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "contractId")
+
+	c, err := h.contractSvc.GetContract(r.Context(), contractID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to get contract")
+		return
+	}
+	if c == nil {
+		util.Error(w, http.StatusNotFound, "contract not found")
+		return
+	}
+
+	userID := middleware.UserIDFromContext(r.Context())
+	member, err := h.contractSvc.IsOrgMember(r.Context(), userID, c.OrganizationID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to verify organization membership")
+		return
+	}
+	if !member {
+		util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+		return
+	}
+
 	clauses, err := h.contractSvc.ListClauses(r.Context(), contractID)
 	if err != nil {
 		util.Error(w, http.StatusInternalServerError, "failed to list clauses")
@@ -224,9 +247,79 @@ func (h *ContractHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// updateContractBody is the JSON body accepted by PATCH /contracts/{contractId}.
+type updateContractBody struct {
+	Title        *string `json:"title"`
+	Tags         *string `json:"tags"`
+	Parties      *string `json:"parties"`
+	Language     *string `json:"language"`
+	ContractType *string `json:"contractType"`
+	SignedAt     *string `json:"signedAt"`
+	ExpiresAt    *string `json:"expiresAt"`
+}
+
+// Update handles PATCH /contracts/{contractId}
+func (h *ContractHandler) Update(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "contractId")
+	userID := middleware.UserIDFromContext(r.Context())
+
+	var body updateContractBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		util.Error(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	req := service.UpdateContractRequest{
+		Title:        body.Title,
+		Tags:         body.Tags,
+		Parties:      body.Parties,
+		Language:     body.Language,
+		ContractType: body.ContractType,
+		SignedAt:     body.SignedAt,
+		ExpiresAt:    body.ExpiresAt,
+	}
+
+	updated, err := h.contractSvc.UpdateContract(r.Context(), contractID, userID, req)
+	if err != nil {
+		switch {
+		case err.Error() == "contractService.UpdateContract: contract not found":
+			util.Error(w, http.StatusNotFound, "contract not found")
+		case err.Error() == "contractService.UpdateContract: access denied":
+			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+		default:
+			util.Error(w, http.StatusInternalServerError, "failed to update contract: "+err.Error())
+		}
+		return
+	}
+
+	util.JSON(w, http.StatusOK, updated)
+}
+
 // GetSnippets handles GET /contracts/{contractId}/snippets
 func (h *ContractHandler) GetSnippets(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "contractId")
+
+	c, err := h.contractSvc.GetContract(r.Context(), contractID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to get contract")
+		return
+	}
+	if c == nil {
+		util.Error(w, http.StatusNotFound, "contract not found")
+		return
+	}
+
+	userID := middleware.UserIDFromContext(r.Context())
+	member, err := h.contractSvc.IsOrgMember(r.Context(), userID, c.OrganizationID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to verify organization membership")
+		return
+	}
+	if !member {
+		util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+		return
+	}
+
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	startOffset, _ := strconv.Atoi(r.URL.Query().Get("startOffset"))
 	endOffset, _ := strconv.Atoi(r.URL.Query().Get("endOffset"))
