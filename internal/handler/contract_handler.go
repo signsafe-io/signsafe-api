@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"log/slog"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/signsafe-io/signsafe-api/internal/middleware"
 	"github.com/signsafe-io/signsafe-api/internal/service"
@@ -122,6 +124,7 @@ func (h *ContractHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		File:           fullFile,
 	})
 	if err != nil {
+		slog.Error("contract upload failed", "error", err, "orgId", orgID, "userId", userID)
 		util.Error(w, http.StatusInternalServerError, "upload failed")
 		return
 	}
