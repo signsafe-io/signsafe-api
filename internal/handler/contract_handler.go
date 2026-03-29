@@ -24,12 +24,6 @@ const maxUploadSize = 50 * 1024 * 1024 // 50 MB
 // Validated against actual magic bytes, not the client-supplied Content-Type.
 var allowedMimeTypes = map[string]struct{}{
 	"application/pdf": {},
-	// DOCX, XLSX, PPTX share the same ZIP magic bytes (PK\x03\x04).
-	// net/http.DetectContentType returns "application/zip" for these;
-	// we accept it and let the parser deal with the specific Office format.
-	"application/zip": {},
-	// Older .doc / .xls / .ppt (Compound Document)
-	"application/octet-stream": {},
 }
 
 // ContractHandler handles contract-related HTTP requests.
@@ -95,7 +89,7 @@ func (h *ContractHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	detectedType := http.DetectContentType(fileBytes)
 	if _, ok := allowedMimeTypes[detectedType]; !ok {
 		util.Error(w, http.StatusUnsupportedMediaType,
-			"unsupported file type: only PDF and Office documents are accepted")
+			"unsupported file type: only PDF files are accepted")
 		return
 	}
 	fullFile := bytes.NewReader(fileBytes)
