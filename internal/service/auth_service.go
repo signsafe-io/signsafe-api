@@ -274,6 +274,31 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword stri
 	return nil
 }
 
+// ResendVerification issues a new email-verification token and sends it.
+// Always returns nil to prevent account enumeration.
+func (s *AuthService) ResendVerification(ctx context.Context, emailAddr string) error {
+	u, err := s.userRepo.FindByEmail(ctx, emailAddr)
+	if err != nil {
+		return fmt.Errorf("authService.ResendVerification: %w", err)
+	}
+	if u == nil || u.EmailVerified {
+		// Silently succeed — do not reveal whether the address exists or is already verified.
+		return nil
+	}
+
+	verifyToken := generateOpaqueToken()
+	expires := time.Now().Add(verifyTokenTTL)
+	if err := s.userRepo.SetEmailVerifyToken(ctx, u.ID, verifyToken, expires); err != nil {
+		return fmt.Errorf("authService.ResendVerification: %w", err)
+	}
+
+	if err := s.emailClient.SendVerificationEmail(u.Email, verifyToken); err != nil {
+		slog.Warn("authService.ResendVerification: failed to send email",
+			"userId", u.ID, "error", err)
+	}
+	return nil
+}
+
 // GetMeResult holds user details together with the primary organization.
 type GetMeResult struct {
 	User           *model.User

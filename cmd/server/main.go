@@ -135,6 +135,7 @@ func main() {
 		r.Post("/logout", authHandler.Logout)
 		r.Post("/password/forgot", authHandler.ForgotPassword)
 		r.Post("/password/reset", authHandler.ResetPassword)
+		r.With(signupLimiter).Post("/resend-verification", authHandler.ResendVerification)
 	})
 
 	// Protected routes

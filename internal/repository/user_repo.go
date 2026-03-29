@@ -109,6 +109,20 @@ func (r *UserRepo) MarkEmailVerified(ctx context.Context, id string) error {
 	return nil
 }
 
+// SetEmailVerifyToken replaces the current email verification token with a new one.
+func (r *UserRepo) SetEmailVerifyToken(ctx context.Context, id, token string, expires time.Time) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE users
+		SET email_verify_token = $1,
+		    email_verify_expires_at = $2,
+		    updated_at = NOW()
+		WHERE id = $3`, token, expires, id)
+	if err != nil {
+		return fmt.Errorf("userRepo.SetEmailVerifyToken: %w", err)
+	}
+	return nil
+}
+
 // SetPasswordResetToken stores a password reset token.
 func (r *UserRepo) SetPasswordResetToken(ctx context.Context, id, token string, expires time.Time) error {
 	_, err := r.db.ExecContext(ctx, `
