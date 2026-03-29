@@ -176,6 +176,21 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	util.JSON(w, http.StatusOK, map[string]string{"message": "logged out"})
 }
 
+// ResendVerification handles POST /auth/resend-verification
+func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		util.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Always return 200 regardless of account state (security: prevent enumeration).
+	_ = h.authSvc.ResendVerification(r.Context(), req.Email)
+	util.JSON(w, http.StatusOK, map[string]string{"message": "if the email exists and is unverified, a new verification link has been sent"})
+}
+
 // ForgotPassword handles POST /auth/password/forgot
 func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
