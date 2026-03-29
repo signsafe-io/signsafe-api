@@ -85,22 +85,20 @@ func (h *ContractHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Read the first 512 bytes to detect the true MIME type from magic bytes.
-	// This is independent of the client-supplied Content-Type header.
-	sniff := make([]byte, 512)
-	n, err := file.Read(sniff)
-	if err != nil && err != io.EOF {
+	// Read entire file into memory so we can (a) detect MIME type and
+	// (b) pass a seekable bytes.Reader to the S3 SDK (PutObject requires seek).
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
 		util.Error(w, http.StatusBadRequest, "failed to read file")
 		return
 	}
-	detectedType := http.DetectContentType(sniff[:n])
+	detectedType := http.DetectContentType(fileBytes)
 	if _, ok := allowedMimeTypes[detectedType]; !ok {
 		util.Error(w, http.StatusUnsupportedMediaType,
 			"unsupported file type: only PDF and Office documents are accepted")
 		return
 	}
-	// Reconstruct the reader so the full file is available for upload.
-	fullFile := io.MultiReader(bytes.NewReader(sniff[:n]), file)
+	fullFile := bytes.NewReader(fileBytes)
 
 	title := r.FormValue("title")
 	if title == "" {
