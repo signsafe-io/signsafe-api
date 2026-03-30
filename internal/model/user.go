@@ -37,6 +37,17 @@ type UserOrganization struct {
 	JoinedAt       time.Time `db:"joined_at" json:"joinedAt"`
 }
 
+type PendingInvitation struct {
+	ID             string    `db:"id"`
+	OrganizationID string    `db:"organization_id"`
+	InvitedBy      string    `db:"invited_by"`
+	Email          string    `db:"email"`
+	Role           string    `db:"role"`
+	Token          string    `db:"token"`
+	ExpiresAt      time.Time `db:"expires_at"`
+	CreatedAt      time.Time `db:"created_at"`
+}
+
 type RefreshToken struct {
 	ID        string    `db:"id"`
 	UserID    string    `db:"user_id"`

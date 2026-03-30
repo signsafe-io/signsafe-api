@@ -294,6 +294,23 @@ func (r *UserRepo) IsOrgMember(ctx context.Context, userID, orgID string) (bool,
 	return count > 0, nil
 }
 
+// GetMemberRole returns the role of a user in an org, or "" if not a member.
+func (r *UserRepo) GetMemberRole(ctx context.Context, userID, orgID string) (string, error) {
+	var role string
+	err := r.db.GetContext(ctx, &role, `
+		SELECT role
+		FROM user_organizations
+		WHERE user_id = $1 AND organization_id = $2`,
+		userID, orgID)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("userRepo.GetMemberRole: %w", err)
+	}
+	return role, nil
+}
+
 // FindOrganizationByUserID returns the first organization a user belongs to.
 func (r *UserRepo) FindOrganizationByUserID(ctx context.Context, userID string) (*model.Organization, error) {
 	var org model.Organization
@@ -405,6 +422,70 @@ func (r *UserRepo) RemoveOrgMember(ctx context.Context, userID, orgID string) er
 		WHERE user_id = $1 AND organization_id = $2`, userID, orgID)
 	if err != nil {
 		return fmt.Errorf("userRepo.RemoveOrgMember: %w", err)
+	}
+	return nil
+}
+
+// UpdateMemberRole changes the role of a member in an organization.
+func (r *UserRepo) UpdateMemberRole(ctx context.Context, userID, orgID, role string) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE user_organizations SET role = $1
+		WHERE user_id = $2 AND organization_id = $3`, role, userID, orgID)
+	if err != nil {
+		return fmt.Errorf("userRepo.UpdateMemberRole: %w", err)
+	}
+	return nil
+}
+
+// CreateInvitation stores a pending invitation.
+func (r *UserRepo) CreateInvitation(ctx context.Context, inv *model.PendingInvitation) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO pending_invitations
+		    (id, organization_id, invited_by, email, role, token, expires_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+		ON CONFLICT (organization_id, email)
+		DO UPDATE SET token = EXCLUDED.token,
+		              role = EXCLUDED.role,
+		              expires_at = EXCLUDED.expires_at`,
+		inv.ID, inv.OrganizationID, inv.InvitedBy, inv.Email, inv.Role, inv.Token, inv.ExpiresAt)
+	if err != nil {
+		return fmt.Errorf("userRepo.CreateInvitation: %w", err)
+	}
+	return nil
+}
+
+// FindInvitationByToken retrieves a non-expired invitation by token.
+func (r *UserRepo) FindInvitationByToken(ctx context.Context, token string) (*model.PendingInvitation, error) {
+	var inv model.PendingInvitation
+	err := r.db.GetContext(ctx, &inv, `
+		SELECT * FROM pending_invitations
+		WHERE token = $1 AND expires_at > NOW()`, token)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("userRepo.FindInvitationByToken: %w", err)
+	}
+	return &inv, nil
+}
+
+// FindInvitationsByEmail retrieves all pending invitations for an email.
+func (r *UserRepo) FindInvitationsByEmail(ctx context.Context, email string) ([]model.PendingInvitation, error) {
+	var invs []model.PendingInvitation
+	err := r.db.SelectContext(ctx, &invs, `
+		SELECT * FROM pending_invitations
+		WHERE email = $1 AND expires_at > NOW()`, email)
+	if err != nil {
+		return nil, fmt.Errorf("userRepo.FindInvitationsByEmail: %w", err)
+	}
+	return invs, nil
+}
+
+// DeleteInvitation removes a pending invitation by ID.
+func (r *UserRepo) DeleteInvitation(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM pending_invitations WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("userRepo.DeleteInvitation: %w", err)
 	}
 	return nil
 }
