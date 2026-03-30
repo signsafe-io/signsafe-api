@@ -412,3 +412,47 @@ func hashToken(raw string) string {
 	h := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(h[:])
 }
+
+// UpdateProfile updates the display name of the authenticated user.
+func (s *AuthService) UpdateProfile(ctx context.Context, userID, fullName string) (*model.User, error) {
+	if fullName == "" {
+		return nil, fmt.Errorf("authService.UpdateProfile: fullName cannot be empty")
+	}
+	u, err := s.userRepo.UpdateFullName(ctx, userID, fullName)
+	if err != nil {
+		return nil, fmt.Errorf("authService.UpdateProfile: %w", err)
+	}
+	if u == nil {
+		return nil, fmt.Errorf("authService.UpdateProfile: user not found")
+	}
+	return u, nil
+}
+
+// ChangePassword verifies the current password and sets a new one.
+func (s *AuthService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
+	if len(newPassword) < 8 {
+		return fmt.Errorf("authService.ChangePassword: new password must be at least 8 characters")
+	}
+	u, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("authService.ChangePassword: %w", err)
+	}
+	if u == nil {
+		return fmt.Errorf("authService.ChangePassword: user not found")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(currentPassword)); err != nil {
+		return fmt.Errorf("authService.ChangePassword: current password is incorrect")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), 12)
+	if err != nil {
+		return fmt.Errorf("authService.ChangePassword: hash: %w", err)
+	}
+	if err := s.userRepo.UpdatePassword(ctx, userID, string(hash)); err != nil {
+		return fmt.Errorf("authService.ChangePassword: %w", err)
+	}
+	// Revoke all existing sessions so stolen tokens can't be reused.
+	if err := s.userRepo.RevokeAllRefreshTokens(ctx, userID); err != nil {
+		slog.Warn("authService.ChangePassword: failed to revoke refresh tokens", "userId", userID, "error", err)
+	}
+	return nil
+}
