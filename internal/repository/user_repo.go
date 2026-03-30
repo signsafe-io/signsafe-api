@@ -8,6 +8,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/signsafe-io/signsafe-api/internal/model"
+	"github.com/signsafe-io/signsafe-api/internal/util"
 )
 
 // UserRepo handles DB operations for users and tokens.
@@ -310,4 +311,100 @@ func (r *UserRepo) FindOrganizationByUserID(ctx context.Context, userID string) 
 		return nil, fmt.Errorf("userRepo.FindOrganizationByUserID: %w", err)
 	}
 	return &org, nil
+}
+
+// FindOrganizationByID returns an organization by ID.
+func (r *UserRepo) FindOrganizationByID(ctx context.Context, orgID string) (*model.Organization, error) {
+	var org model.Organization
+	err := r.db.GetContext(ctx, &org, `SELECT * FROM organizations WHERE id = $1`, orgID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("userRepo.FindOrganizationByID: %w", err)
+	}
+	return &org, nil
+}
+
+// UpdateOrganizationName updates the name of an organization.
+// Returns nil, nil if the organization does not exist.
+func (r *UserRepo) UpdateOrganizationName(ctx context.Context, orgID, name string) (*model.Organization, error) {
+	var org model.Organization
+	err := r.db.GetContext(ctx, &org, `
+		UPDATE organizations SET name = $1, updated_at = NOW()
+		WHERE id = $2
+		RETURNING *`, name, orgID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("userRepo.UpdateOrganizationName: %w", err)
+	}
+	return &org, nil
+}
+
+// UpdateFullName updates a user's display name.
+// Returns nil, nil if the user does not exist.
+func (r *UserRepo) UpdateFullName(ctx context.Context, userID, fullName string) (*model.User, error) {
+	var u model.User
+	err := r.db.GetContext(ctx, &u, `
+		UPDATE users SET full_name = $1, updated_at = NOW()
+		WHERE id = $2
+		RETURNING *`, fullName, userID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("userRepo.UpdateFullName: %w", err)
+	}
+	return &u, nil
+}
+
+// OrgMember holds member info returned by ListOrgMembers.
+type OrgMember struct {
+	UserID   string    `db:"user_id"`
+	Email    string    `db:"email"`
+	FullName string    `db:"full_name"`
+	Role     string    `db:"role"`
+	JoinedAt time.Time `db:"joined_at"`
+}
+
+// ListOrgMembers returns all members of an organization.
+func (r *UserRepo) ListOrgMembers(ctx context.Context, orgID string) ([]OrgMember, error) {
+	var members []OrgMember
+	err := r.db.SelectContext(ctx, &members, `
+		SELECT uo.user_id, u.email, u.full_name, uo.role, uo.joined_at
+		FROM user_organizations uo
+		JOIN users u ON u.id = uo.user_id
+		WHERE uo.organization_id = $1
+		ORDER BY uo.joined_at ASC`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("userRepo.ListOrgMembers: %w", err)
+	}
+	return members, nil
+}
+
+// AddOrgMember adds a user to an organization with the given role.
+func (r *UserRepo) AddOrgMember(ctx context.Context, userID, orgID, role string) error {
+	id := util.NewID()
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO user_organizations (id, user_id, organization_id, role, permissions, joined_at)
+		VALUES ($1, $2, $3, $4, '[]', NOW())
+		ON CONFLICT (user_id, organization_id) DO NOTHING`,
+		id, userID, orgID, role)
+	if err != nil {
+		return fmt.Errorf("userRepo.AddOrgMember: %w", err)
+	}
+	return nil
+}
+
+// RemoveOrgMember removes a user from an organization.
+func (r *UserRepo) RemoveOrgMember(ctx context.Context, userID, orgID string) error {
+	_, err := r.db.ExecContext(ctx, `
+		DELETE FROM user_organizations
+		WHERE user_id = $1 AND organization_id = $2`, userID, orgID)
+	if err != nil {
+		return fmt.Errorf("userRepo.RemoveOrgMember: %w", err)
+	}
+	return nil
 }

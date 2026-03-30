@@ -92,6 +92,7 @@ func main() {
 	// --- Services ---
 	userRepo := repository.NewUserRepo(db)
 	authSvc := service.NewAuthService(userRepo, cacheClient, emailClient, jwtSecret)
+	orgSvc := service.NewOrgService(userRepo)
 
 	contractRepo := repository.NewContractRepo(db)
 	contractSvc := service.NewContractService(contractRepo, userRepo, queueClient, storageClient)
@@ -107,6 +108,7 @@ func main() {
 
 	// --- Handlers ---
 	authHandler := handler.NewAuthHandler(authSvc)
+	orgHandler := handler.NewOrgHandler(orgSvc, authSvc)
 	contractHandler := handler.NewContractHandler(contractSvc, auditSvc)
 	analysisHandler := handler.NewAnalysisHandler(analysisSvc, auditSvc)
 	evidenceHandler := handler.NewEvidenceHandler(evidenceSvc)
@@ -143,6 +145,16 @@ func main() {
 		r.Use(middleware.Authenticate(jwtSecret))
 
 		r.Get("/users/me", authHandler.GetMe)
+		r.Patch("/users/me", orgHandler.UpdateProfile)
+		r.Patch("/users/me/password", orgHandler.ChangePassword)
+
+		r.Route("/organizations/{orgId}", func(r chi.Router) {
+			r.Get("/", orgHandler.GetOrganization)
+			r.Patch("/", orgHandler.UpdateOrganization)
+			r.Get("/members", orgHandler.ListMembers)
+			r.Post("/members", orgHandler.InviteMember)
+			r.Delete("/members/{userId}", orgHandler.RemoveMember)
+		})
 
 		r.Route("/contracts", func(r chi.Router) {
 			r.Get("/", contractHandler.List)
