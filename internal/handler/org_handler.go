@@ -163,14 +163,44 @@ func (h *OrgHandler) InviteMember(w http.ResponseWriter, r *http.Request) {
 		msg := err.Error()
 		if strings.Contains(msg, "access denied") {
 			util.Error(w, http.StatusForbidden, "access denied")
-		} else if strings.Contains(msg, "user not found") {
-			util.Error(w, http.StatusNotFound, "user with that email not found")
+		} else if strings.Contains(msg, "invalid role") {
+			util.Error(w, http.StatusBadRequest, "invalid role")
 		} else {
 			util.Error(w, http.StatusInternalServerError, "failed to invite member")
 		}
 		return
 	}
 	util.JSON(w, http.StatusOK, map[string]string{"message": "member added"})
+}
+
+// UpdateMemberRole handles PATCH /organizations/{orgId}/members/{userId}
+func (h *OrgHandler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	orgID := chi.URLParam(r, "orgId")
+	targetUserID := chi.URLParam(r, "userId")
+	var body struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		util.Error(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if body.Role == "" {
+		util.Error(w, http.StatusBadRequest, "role is required")
+		return
+	}
+	if err := h.orgSvc.UpdateMemberRole(r.Context(), userID, orgID, targetUserID, body.Role); err != nil {
+		msg := err.Error()
+		if strings.Contains(msg, "access denied") {
+			util.Error(w, http.StatusForbidden, "access denied")
+		} else if strings.Contains(msg, "invalid role") {
+			util.Error(w, http.StatusBadRequest, "invalid role")
+		} else {
+			util.Error(w, http.StatusInternalServerError, "failed to update member role")
+		}
+		return
+	}
+	util.JSON(w, http.StatusOK, map[string]string{"message": "role updated"})
 }
 
 // RemoveMember handles DELETE /organizations/{orgId}/members/{userId}

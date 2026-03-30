@@ -92,7 +92,7 @@ func main() {
 	// --- Services ---
 	userRepo := repository.NewUserRepo(db)
 	authSvc := service.NewAuthService(userRepo, cacheClient, emailClient, jwtSecret)
-	orgSvc := service.NewOrgService(userRepo)
+	orgSvc := service.NewOrgService(userRepo, emailClient, appBaseURL)
 
 	contractRepo := repository.NewContractRepo(db)
 	contractSvc := service.NewContractService(contractRepo, userRepo, queueClient, storageClient)
@@ -107,7 +107,7 @@ func main() {
 	auditSvc := service.NewAuditService(auditRepo)
 
 	// --- Handlers ---
-	authHandler := handler.NewAuthHandler(authSvc)
+	authHandler := handler.NewAuthHandler(authSvc, orgSvc)
 	orgHandler := handler.NewOrgHandler(orgSvc, authSvc)
 	contractHandler := handler.NewContractHandler(contractSvc, auditSvc)
 	analysisHandler := handler.NewAnalysisHandler(analysisSvc, auditSvc)
@@ -153,6 +153,7 @@ func main() {
 			r.Patch("/", orgHandler.UpdateOrganization)
 			r.Get("/members", orgHandler.ListMembers)
 			r.Post("/members", orgHandler.InviteMember)
+			r.Patch("/members/{userId}", orgHandler.UpdateMemberRole)
 			r.Delete("/members/{userId}", orgHandler.RemoveMember)
 		})
 

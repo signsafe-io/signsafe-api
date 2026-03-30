@@ -301,11 +301,12 @@ func (s *AuthService) ResendVerification(ctx context.Context, emailAddr string) 
 
 // GetMeResult holds user details together with the primary organization.
 type GetMeResult struct {
-	User           *model.User
-	OrganizationID string
+	User             *model.User
+	OrganizationID   string
+	OrganizationName string
 }
 
-// GetMe returns the full user details with their primary organization ID.
+// GetMe returns the full user details with their primary organization ID and name.
 func (s *AuthService) GetMe(ctx context.Context, userID string) (*GetMeResult, error) {
 	u, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
@@ -320,12 +321,13 @@ func (s *AuthService) GetMe(ctx context.Context, userID string) (*GetMeResult, e
 		return nil, fmt.Errorf("authService.GetMe: find org: %w", err)
 	}
 
-	orgID := ""
+	orgID, orgName := "", ""
 	if org != nil {
 		orgID = org.ID
+		orgName = org.Name
 	}
 
-	return &GetMeResult{User: u, OrganizationID: orgID}, nil
+	return &GetMeResult{User: u, OrganizationID: orgID, OrganizationName: orgName}, nil
 }
 
 // --- internal helpers ---

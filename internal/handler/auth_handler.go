@@ -13,11 +13,12 @@ import (
 // AuthHandler handles auth-related HTTP requests.
 type AuthHandler struct {
 	authSvc *service.AuthService
+	orgSvc  *service.OrgService
 }
 
 // NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(authSvc *service.AuthService) *AuthHandler {
-	return &AuthHandler{authSvc: authSvc}
+func NewAuthHandler(authSvc *service.AuthService, orgSvc *service.OrgService) *AuthHandler {
+	return &AuthHandler{authSvc: authSvc, orgSvc: orgSvc}
 }
 
 // Signup handles POST /auth/signup
@@ -53,6 +54,9 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	// Accept any pending org invitations for this email.
+	h.orgSvc.AcceptPendingInvitations(r.Context(), result.UserID, req.Email)
 
 	util.JSON(w, http.StatusCreated, map[string]interface{}{
 		"userId":         result.UserID,
@@ -249,15 +253,16 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 
 	u := result.User
 	util.JSON(w, http.StatusOK, map[string]interface{}{
-		"id":             u.ID,
-		"email":          u.Email,
-		"fullName":       u.FullName,
-		"role":           u.Role,
-		"emailVerified":  u.EmailVerified,
-		"mfaEnabled":     u.MFAEnabled,
-		"createdAt":      u.CreatedAt,
-		"permissions":    defaultPermissions(u.Role),
-		"organizationId": result.OrganizationID,
+		"id":               u.ID,
+		"email":            u.Email,
+		"fullName":         u.FullName,
+		"role":             u.Role,
+		"emailVerified":    u.EmailVerified,
+		"mfaEnabled":       u.MFAEnabled,
+		"createdAt":        u.CreatedAt,
+		"permissions":      defaultPermissions(u.Role),
+		"organizationId":   result.OrganizationID,
+		"organizationName": result.OrganizationName,
 	})
 }
 
