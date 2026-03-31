@@ -311,6 +311,61 @@ func (r *UserRepo) GetMemberRole(ctx context.Context, userID, orgID string) (str
 	return role, nil
 }
 
+// UserOrganizationRow holds an organization together with the requesting user's role in it.
+type UserOrganizationRow struct {
+	ID   string `db:"id"`
+	Name string `db:"name"`
+	Plan string `db:"plan"`
+	Role string `db:"role"`
+}
+
+// ListUserOrganizations returns all organizations a user belongs to, including the user's role in each.
+func (r *UserRepo) ListUserOrganizations(ctx context.Context, userID string) ([]UserOrganizationRow, error) {
+	var rows []UserOrganizationRow
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT o.id, o.name, o.plan, uo.role
+		FROM organizations o
+		JOIN user_organizations uo ON uo.organization_id = o.id
+		WHERE uo.user_id = $1
+		ORDER BY uo.joined_at ASC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("userRepo.ListUserOrganizations: %w", err)
+	}
+	return rows, nil
+}
+
+// CreateOrganizationWithAdmin inserts a new organization and adds the given user as admin in a single transaction.
+func (r *UserRepo) CreateOrganizationWithAdmin(ctx context.Context, org *model.Organization, userID string) error {
+	memberID := util.NewID()
+
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("userRepo.CreateOrganizationWithAdmin: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO organizations (id, name, plan, features, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+		org.ID, org.Name, org.Plan, org.Features,
+	); err != nil {
+		return fmt.Errorf("userRepo.CreateOrganizationWithAdmin: insert org: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO user_organizations (id, user_id, organization_id, role, permissions, joined_at)
+		VALUES ($1, $2, $3, 'admin', '[]', NOW())`,
+		memberID, userID, org.ID,
+	); err != nil {
+		return fmt.Errorf("userRepo.CreateOrganizationWithAdmin: insert membership: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("userRepo.CreateOrganizationWithAdmin: commit: %w", err)
+	}
+	return nil
+}
+
 // FindOrganizationByUserID returns the first organization a user belongs to.
 func (r *UserRepo) FindOrganizationByUserID(ctx context.Context, userID string) (*model.Organization, error) {
 	var org model.Organization

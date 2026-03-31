@@ -147,7 +147,9 @@ func main() {
 		r.Get("/users/me", authHandler.GetMe)
 		r.Patch("/users/me", orgHandler.UpdateProfile)
 		r.Patch("/users/me/password", orgHandler.ChangePassword)
+		r.Get("/users/me/organizations", orgHandler.ListMyOrganizations)
 
+		r.Post("/organizations", orgHandler.CreateOrganization)
 		r.Route("/organizations/{orgId}", func(r chi.Router) {
 			r.Get("/", orgHandler.GetOrganization)
 			r.Patch("/", orgHandler.UpdateOrganization)

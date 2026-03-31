@@ -67,6 +67,24 @@
 
 ---
 
+## 2026-03-30: 조직 생성 및 내 조직 목록 API 추가
+
+**결정**:
+- `GET /users/me/organizations`: 인증된 사용자가 속한 모든 조직과 각각의 role을 배열로 반환한다.
+- `POST /organizations`: 이름을 받아 새 조직을 생성하고, 생성자를 admin으로 자동 등록한다.
+- `userRepo.ListUserOrganizations`: organizations와 user_organizations를 JOIN하여 id, name, plan, role을 한 번에 조회한다.
+- `userRepo.CreateOrganizationWithAdmin`: organizations INSERT와 user_organizations INSERT를 단일 트랜잭션으로 처리한다.
+- 새로 생성되는 조직의 기본 plan은 `"free"`, features는 `"[]"`로 설정한다.
+
+**이유**:
+- 회원가입 시 자동 생성되는 개인 조직 외에 팀/프로젝트 단위로 추가 조직을 만들 수 있어야 함
+- 다중 조직 멤버십을 가진 사용자가 조직 전환 UI를 구현하려면 전체 소속 목록이 필요함
+- org + membership을 단일 트랜잭션으로 처리하여 orphan 조직(멤버 없는 조직)이 생기지 않도록 보장
+
+**영향**: signsafe-web이 조직 선택/전환 UI를 구현할 때 `GET /users/me/organizations`를 사용해야 함
+
+---
+
 ## 2026-03-27: 비동기 작업 패턴 — Job ID 즉시 반환
 
 **결정**: 파싱, 분석 등 시간이 걸리는 모든 작업은 즉시 Job ID를 반환하고 RabbitMQ 큐에 위임한다.
