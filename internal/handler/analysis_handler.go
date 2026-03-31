@@ -1,11 +1,9 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
-	"net"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/signsafe-io/signsafe-api/internal/middleware"
@@ -24,30 +22,6 @@ func NewAnalysisHandler(analysisSvc *service.AnalysisService, auditSvc *service.
 	return &AnalysisHandler{analysisSvc: analysisSvc, auditSvc: auditSvc}
 }
 
-// logAudit records an audit event in a best-effort, non-blocking way.
-func (h *AnalysisHandler) logAudit(r *http.Request, action string, targetType, targetID *string) {
-	ipAddr := r.RemoteAddr
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		ipAddr = host
-	}
-	userAgent := r.UserAgent()
-	userID := middleware.UserIDFromContext(r.Context())
-
-	req := service.CreateAuditEventRequest{
-		Action:     action,
-		TargetType: targetType,
-		TargetID:   targetID,
-		IPAddress:  &ipAddr,
-		UserAgent:  &userAgent,
-	}
-	if userID != "" {
-		req.ActorID = &userID
-	}
-	go func() {
-		_, _ = h.auditSvc.CreateAuditEvent(context.Background(), req)
-	}()
-}
-
 // GetLatestAnalysis handles GET /contracts/{contractId}/risk-analyses
 func (h *AnalysisHandler) GetLatestAnalysis(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "contractId")
@@ -56,9 +30,9 @@ func (h *AnalysisHandler) GetLatestAnalysis(w http.ResponseWriter, r *http.Reque
 	analysis, results, err := h.analysisSvc.GetLatestAnalysis(r.Context(), contractID, userID)
 	if err != nil {
 		switch {
-		case strings.Contains(err.Error(), "contract not found"):
+		case errors.Is(err, service.ErrNotFound):
 			util.Error(w, http.StatusNotFound, "contract not found")
-		case strings.Contains(err.Error(), "access denied"):
+		case errors.Is(err, service.ErrAccessDenied):
 			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
 		default:
 			util.Error(w, http.StatusInternalServerError, "failed to get analysis")
@@ -84,11 +58,11 @@ func (h *AnalysisHandler) CreateAnalysis(w http.ResponseWriter, r *http.Request)
 	analysisID, err := h.analysisSvc.CreateAnalysis(r.Context(), contractID, userID)
 	if err != nil {
 		switch {
-		case strings.Contains(err.Error(), "analysis already running"):
+		case errors.Is(err, service.ErrConflict):
 			util.Error(w, http.StatusConflict, "analysis already running for this contract")
-		case strings.Contains(err.Error(), "contract not found"):
+		case errors.Is(err, service.ErrNotFound):
 			util.Error(w, http.StatusNotFound, "contract not found")
-		case strings.Contains(err.Error(), "access denied"):
+		case errors.Is(err, service.ErrAccessDenied):
 			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
 		default:
 			util.Error(w, http.StatusInternalServerError, "failed to create analysis")
@@ -97,7 +71,7 @@ func (h *AnalysisHandler) CreateAnalysis(w http.ResponseWriter, r *http.Request)
 	}
 
 	targetType := "contract"
-	h.logAudit(r, "ANALYSIS_REQUESTED", &targetType, &contractID)
+	logAuditEvent(r, h.auditSvc, "ANALYSIS_REQUESTED", &targetType, &contractID, nil)
 
 	util.JSON(w, http.StatusAccepted, map[string]string{
 		"analysisId": analysisID,
@@ -113,7 +87,7 @@ func (h *AnalysisHandler) GetAnalysis(w http.ResponseWriter, r *http.Request) {
 	analysis, results, err := h.analysisSvc.GetAnalysis(r.Context(), analysisID, userID)
 	if err != nil {
 		switch {
-		case strings.Contains(err.Error(), "access denied"):
+		case errors.Is(err, service.ErrAccessDenied):
 			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
 		default:
 			util.Error(w, http.StatusInternalServerError, "failed to get analysis")
@@ -153,15 +127,11 @@ func (h *AnalysisHandler) CreateOverride(w http.ResponseWriter, r *http.Request)
 	override, err := h.analysisSvc.CreateOverride(r.Context(), analysisID, req.ClauseResultID, req.NewRiskLevel, req.Reason, userID)
 	if err != nil {
 		switch {
-		case strings.Contains(err.Error(), "invalid risk level"):
+		case errors.Is(err, service.ErrInvalidInput):
 			util.Error(w, http.StatusBadRequest, "invalid risk level: must be HIGH, MEDIUM, or LOW")
-		case strings.Contains(err.Error(), "analysis not found"):
-			util.Error(w, http.StatusNotFound, "analysis not found")
-		case strings.Contains(err.Error(), "clause result not found"):
-			util.Error(w, http.StatusNotFound, "clause result not found")
-		case strings.Contains(err.Error(), "does not belong to analysis"):
-			util.Error(w, http.StatusForbidden, "clause result does not belong to this analysis")
-		case strings.Contains(err.Error(), "access denied"):
+		case errors.Is(err, service.ErrNotFound):
+			util.Error(w, http.StatusNotFound, "analysis or clause result not found")
+		case errors.Is(err, service.ErrAccessDenied):
 			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
 		default:
 			util.Error(w, http.StatusInternalServerError, "failed to create override")
@@ -170,7 +140,7 @@ func (h *AnalysisHandler) CreateOverride(w http.ResponseWriter, r *http.Request)
 	}
 
 	targetType := "clause_result"
-	h.logAudit(r, "RISK_OVERRIDDEN", &targetType, &req.ClauseResultID)
+	logAuditEvent(r, h.auditSvc, "RISK_OVERRIDDEN", &targetType, &req.ClauseResultID, nil)
 
 	util.JSON(w, http.StatusCreated, override)
 }

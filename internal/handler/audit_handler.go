@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"net"
 	"net/http"
 
 	"github.com/signsafe-io/signsafe-api/internal/middleware"
@@ -40,11 +39,7 @@ func (h *AuditHandler) CreateAuditEvent(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Strip port from RemoteAddr so it can be stored in a PostgreSQL INET column.
-	ipAddr := r.RemoteAddr
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		ipAddr = host
-	}
+	ipAddr := clientIP(r)
 	userAgent := r.UserAgent()
 
 	auditReq := service.CreateAuditEventRequest{

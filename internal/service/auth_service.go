@@ -64,7 +64,7 @@ func (s *AuthService) Signup(ctx context.Context, req SignupRequest) (*SignupRes
 		return nil, fmt.Errorf("authService.Signup: %w", err)
 	}
 	if existing != nil {
-		return nil, fmt.Errorf("authService.Signup: email already registered")
+		return nil, fmt.Errorf("authService.Signup: %w", ErrConflict)
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
@@ -433,7 +433,7 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID, fullName string
 // ChangePassword verifies the current password and sets a new one.
 func (s *AuthService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
 	if len(newPassword) < 8 {
-		return fmt.Errorf("authService.ChangePassword: new password must be at least 8 characters")
+		return fmt.Errorf("authService.ChangePassword: %w", ErrPasswordTooShort)
 	}
 	u, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
@@ -443,7 +443,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID, currentPasswor
 		return fmt.Errorf("authService.ChangePassword: user not found")
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(currentPassword)); err != nil {
-		return fmt.Errorf("authService.ChangePassword: current password is incorrect")
+		return fmt.Errorf("authService.ChangePassword: %w", ErrWrongPassword)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), 12)
 	if err != nil {

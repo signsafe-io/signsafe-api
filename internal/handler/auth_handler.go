@@ -2,8 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/signsafe-io/signsafe-api/internal/middleware"
 	"github.com/signsafe-io/signsafe-api/internal/service"
@@ -47,7 +47,7 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		FullName: req.FullName,
 	})
 	if err != nil {
-		if strings.Contains(err.Error(), "email already registered") {
+		if errors.Is(err, service.ErrConflict) {
 			util.Error(w, http.StatusConflict, "email already registered")
 		} else {
 			util.Error(w, http.StatusInternalServerError, "signup failed")
@@ -105,7 +105,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	pair, err := h.authSvc.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		msg := "invalid credentials"
-		if strings.Contains(err.Error(), "email not verified") {
+		if errors.Is(err, service.ErrEmailNotVerified) {
 			msg = "email not verified"
 		}
 		util.Error(w, http.StatusUnauthorized, msg)

@@ -95,3 +95,30 @@
 - 실패 시 DLQ에서 재시도 가능
 
 **영향**: 클라이언트는 Job 상태를 폴링해야 함 (1-3초 간격 권장)
+
+---
+
+## 2026-03-31: 에러 처리 패턴 — sentinel error + errors.Is 통일
+
+**결정**: 모든 서비스 레이어는 sentinel error를 `fmt.Errorf("ctx: %w", ErrXxx)` 패턴으로 wrap하여 반환하고, 핸들러는 `errors.Is`로 분기한다. 문자열 비교(`strings.Contains`, `err.Error() ==`) 패턴을 전면 제거한다.
+
+추가된 sentinel: `ErrWrongPassword`, `ErrPasswordTooShort` (`service/errors.go`)
+
+**이유**:
+- 에러 메시지 문자열이 변경되어도 핸들러의 분기 로직이 깨지지 않음
+- 래핑 깊이와 무관하게 `errors.Is`는 체인 전체를 탐색하므로 신뢰성 있음
+- 테스트에서 에러 종류를 명확하게 단언 가능
+
+**영향**: 없음 (HTTP 응답 코드 및 외부 API 동작은 동일)
+
+---
+
+## 2026-03-31: 중복 logAudit 메서드 제거
+
+**결정**: `ContractHandler.logAudit`, `AnalysisHandler.logAudit` 두 개의 중복 메서드를 제거하고, `helpers.go`의 패키지 레벨 함수 `logAuditEvent`를 공통으로 사용한다.
+
+**이유**:
+- 동일한 IP 추출 + audit 이벤트 발행 로직이 3개 위치에 분산되어 있었음
+- `audit_handler.go`의 인라인 IP 추출 코드도 `clientIP()` helper로 대체
+
+**영향**: 없음 (동작 동일)
