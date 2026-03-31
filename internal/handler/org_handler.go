@@ -22,6 +22,43 @@ func NewOrgHandler(orgSvc *service.OrgService, authSvc *service.AuthService) *Or
 	return &OrgHandler{orgSvc: orgSvc, authSvc: authSvc}
 }
 
+// ListMyOrganizations handles GET /users/me/organizations
+func (h *OrgHandler) ListMyOrganizations(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	orgs, err := h.orgSvc.ListMyOrganizations(r.Context(), userID)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to list organizations")
+		return
+	}
+	util.JSON(w, http.StatusOK, orgs)
+}
+
+// CreateOrganization handles POST /organizations
+func (h *OrgHandler) CreateOrganization(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		util.Error(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if body.Name == "" {
+		util.Error(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	org, err := h.orgSvc.CreateOrganization(r.Context(), userID, body.Name)
+	if err != nil {
+		util.Error(w, http.StatusInternalServerError, "failed to create organization")
+		return
+	}
+	util.JSON(w, http.StatusCreated, map[string]interface{}{
+		"id":   org.ID,
+		"name": org.Name,
+		"plan": org.Plan,
+	})
+}
+
 // UpdateProfile handles PATCH /users/me
 func (h *OrgHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())

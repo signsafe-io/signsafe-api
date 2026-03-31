@@ -25,6 +25,49 @@ func NewOrgService(userRepo *repository.UserRepo, emailClient *email.Client, app
 	return &OrgService{userRepo: userRepo, emailClient: emailClient, appURL: appURL}
 }
 
+// OrganizationSummary is the public view of an organization with the user's role.
+type OrganizationSummary struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Plan string `json:"plan"`
+	Role string `json:"role"`
+}
+
+// ListMyOrganizations returns all organizations that the given user belongs to.
+func (s *OrgService) ListMyOrganizations(ctx context.Context, userID string) ([]OrganizationSummary, error) {
+	rows, err := s.userRepo.ListUserOrganizations(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("orgService.ListMyOrganizations: %w", err)
+	}
+	out := make([]OrganizationSummary, len(rows))
+	for i, row := range rows {
+		out[i] = OrganizationSummary{
+			ID:   row.ID,
+			Name: row.Name,
+			Plan: row.Plan,
+			Role: row.Role,
+		}
+	}
+	return out, nil
+}
+
+// CreateOrganization creates a new organization and adds the requesting user as admin.
+func (s *OrgService) CreateOrganization(ctx context.Context, userID, name string) (*model.Organization, error) {
+	if name == "" {
+		return nil, fmt.Errorf("orgService.CreateOrganization: name cannot be empty")
+	}
+	org := &model.Organization{
+		ID:       util.NewID(),
+		Name:     name,
+		Plan:     "free",
+		Features: "[]",
+	}
+	if err := s.userRepo.CreateOrganizationWithAdmin(ctx, org, userID); err != nil {
+		return nil, fmt.Errorf("orgService.CreateOrganization: %w", err)
+	}
+	return org, nil
+}
+
 // GetOrganization returns an organization if the requesting user is a member.
 func (s *OrgService) GetOrganization(ctx context.Context, userID, orgID string) (*model.Organization, error) {
 	member, err := s.userRepo.IsOrgMember(ctx, userID, orgID)
