@@ -2,8 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/signsafe-io/signsafe-api/internal/middleware"
@@ -28,7 +28,7 @@ func (h *EvidenceHandler) GetEvidenceSet(w http.ResponseWriter, r *http.Request)
 
 	es, err := h.evidenceSvc.GetEvidenceSet(r.Context(), evidenceSetID, userID)
 	if err != nil {
-		if strings.Contains(err.Error(), "access denied") {
+		if errors.Is(err, service.ErrAccessDenied) {
 			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
 			return
 		}
@@ -60,15 +60,14 @@ func (h *EvidenceHandler) RetrieveEvidence(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := h.evidenceSvc.RetrieveEvidence(r.Context(), evidenceSetID, req.TopK, req.FilterParams, userID); err != nil {
-		if strings.Contains(err.Error(), "access denied") {
+		switch {
+		case errors.Is(err, service.ErrAccessDenied):
 			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
-			return
-		}
-		if strings.Contains(err.Error(), "evidence set not found") {
+		case errors.Is(err, service.ErrNotFound):
 			util.Error(w, http.StatusNotFound, "evidence set not found")
-			return
+		default:
+			util.Error(w, http.StatusInternalServerError, "failed to queue evidence retrieval")
 		}
-		util.Error(w, http.StatusInternalServerError, "failed to queue evidence retrieval")
 		return
 	}
 

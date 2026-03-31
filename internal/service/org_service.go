@@ -54,7 +54,7 @@ func (s *OrgService) ListMyOrganizations(ctx context.Context, userID string) ([]
 // CreateOrganization creates a new organization and adds the requesting user as admin.
 func (s *OrgService) CreateOrganization(ctx context.Context, userID, name string) (*model.Organization, error) {
 	if name == "" {
-		return nil, fmt.Errorf("orgService.CreateOrganization: name cannot be empty")
+		return nil, fmt.Errorf("orgService.CreateOrganization: %w: name cannot be empty", ErrInvalidInput)
 	}
 	org := &model.Organization{
 		ID:       util.NewID(),
@@ -75,7 +75,7 @@ func (s *OrgService) GetOrganization(ctx context.Context, userID, orgID string) 
 		return nil, fmt.Errorf("orgService.GetOrganization: %w", err)
 	}
 	if !member {
-		return nil, fmt.Errorf("orgService.GetOrganization: access denied")
+		return nil, fmt.Errorf("orgService.GetOrganization: %w", ErrAccessDenied)
 	}
 	org, err := s.userRepo.FindOrganizationByID(ctx, orgID)
 	if err != nil {
@@ -87,14 +87,14 @@ func (s *OrgService) GetOrganization(ctx context.Context, userID, orgID string) 
 // UpdateOrganization updates the org name if the requesting user is an admin.
 func (s *OrgService) UpdateOrganization(ctx context.Context, userID, orgID, name string) (*model.Organization, error) {
 	if name == "" {
-		return nil, fmt.Errorf("orgService.UpdateOrganization: name cannot be empty")
+		return nil, fmt.Errorf("orgService.UpdateOrganization: %w: name cannot be empty", ErrInvalidInput)
 	}
 	role, err := s.userRepo.GetMemberRole(ctx, userID, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("orgService.UpdateOrganization: %w", err)
 	}
 	if role != "admin" {
-		return nil, fmt.Errorf("orgService.UpdateOrganization: access denied")
+		return nil, fmt.Errorf("orgService.UpdateOrganization: %w", ErrAccessDenied)
 	}
 	org, err := s.userRepo.UpdateOrganizationName(ctx, orgID, name)
 	if err != nil {
@@ -122,7 +122,7 @@ func (s *OrgService) ListMembers(ctx context.Context, userID, orgID string) ([]M
 		return nil, fmt.Errorf("orgService.ListMembers: %w", err)
 	}
 	if !member {
-		return nil, fmt.Errorf("orgService.ListMembers: access denied")
+		return nil, fmt.Errorf("orgService.ListMembers: %w", ErrAccessDenied)
 	}
 	rows, err := s.userRepo.ListOrgMembers(ctx, orgID)
 	if err != nil {
@@ -150,14 +150,14 @@ func (s *OrgService) InviteMember(ctx context.Context, userID, orgID, inviteeEma
 		return fmt.Errorf("orgService.InviteMember: %w", err)
 	}
 	if requesterRole != "admin" {
-		return fmt.Errorf("orgService.InviteMember: access denied")
+		return fmt.Errorf("orgService.InviteMember: %w", ErrAccessDenied)
 	}
 	if role == "" {
 		role = "member"
 	}
 	validRoles := map[string]bool{"admin": true, "member": true, "reviewer": true}
 	if !validRoles[role] {
-		return fmt.Errorf("orgService.InviteMember: invalid role %q", role)
+		return fmt.Errorf("orgService.InviteMember: %w: %q is not a valid role", ErrInvalidInput, role)
 	}
 
 	// Check if this user already exists.
@@ -219,14 +219,14 @@ func (s *OrgService) AcceptPendingInvitations(ctx context.Context, userID, email
 // RemoveMember removes a member from the org.
 func (s *OrgService) RemoveMember(ctx context.Context, userID, orgID, targetUserID string) error {
 	if userID == targetUserID {
-		return fmt.Errorf("orgService.RemoveMember: cannot remove yourself")
+		return fmt.Errorf("orgService.RemoveMember: %w: cannot remove yourself", ErrInvalidInput)
 	}
 	role, err := s.userRepo.GetMemberRole(ctx, userID, orgID)
 	if err != nil {
 		return fmt.Errorf("orgService.RemoveMember: %w", err)
 	}
 	if role != "admin" {
-		return fmt.Errorf("orgService.RemoveMember: access denied")
+		return fmt.Errorf("orgService.RemoveMember: %w", ErrAccessDenied)
 	}
 	return s.userRepo.RemoveOrgMember(ctx, targetUserID, orgID)
 }
@@ -235,14 +235,14 @@ func (s *OrgService) RemoveMember(ctx context.Context, userID, orgID, targetUser
 func (s *OrgService) UpdateMemberRole(ctx context.Context, userID, orgID, targetUserID, role string) error {
 	validRoles := map[string]bool{"admin": true, "member": true, "reviewer": true}
 	if !validRoles[role] {
-		return fmt.Errorf("orgService.UpdateMemberRole: invalid role %q", role)
+		return fmt.Errorf("orgService.UpdateMemberRole: %w: %q is not a valid role", ErrInvalidInput, role)
 	}
 	requesterRole, err := s.userRepo.GetMemberRole(ctx, userID, orgID)
 	if err != nil {
 		return fmt.Errorf("orgService.UpdateMemberRole: %w", err)
 	}
 	if requesterRole != "admin" {
-		return fmt.Errorf("orgService.UpdateMemberRole: access denied")
+		return fmt.Errorf("orgService.UpdateMemberRole: %w", ErrAccessDenied)
 	}
 	return s.userRepo.UpdateMemberRole(ctx, targetUserID, orgID, role)
 }

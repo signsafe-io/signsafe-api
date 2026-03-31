@@ -2,8 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/signsafe-io/signsafe-api/internal/middleware"
@@ -101,12 +101,12 @@ func (h *OrgHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.authSvc.ChangePassword(r.Context(), userID, body.CurrentPassword, body.NewPassword); err != nil {
-		msg := err.Error()
-		if strings.Contains(msg, "current password is incorrect") {
+		switch {
+		case errors.Is(err, service.ErrWrongPassword):
 			util.Error(w, http.StatusUnauthorized, "current password is incorrect")
-		} else if strings.Contains(msg, "at least 8") {
+		case errors.Is(err, service.ErrPasswordTooShort):
 			util.Error(w, http.StatusBadRequest, "new password must be at least 8 characters")
-		} else {
+		default:
 			util.Error(w, http.StatusInternalServerError, "failed to change password")
 		}
 		return
@@ -120,7 +120,7 @@ func (h *OrgHandler) GetOrganization(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "orgId")
 	org, err := h.orgSvc.GetOrganization(r.Context(), userID, orgID)
 	if err != nil {
-		if strings.Contains(err.Error(), "access denied") {
+		if errors.Is(err, service.ErrAccessDenied) {
 			util.Error(w, http.StatusForbidden, "access denied")
 			return
 		}
@@ -151,7 +151,7 @@ func (h *OrgHandler) UpdateOrganization(w http.ResponseWriter, r *http.Request) 
 	}
 	org, err := h.orgSvc.UpdateOrganization(r.Context(), userID, orgID, body.Name)
 	if err != nil {
-		if strings.Contains(err.Error(), "access denied") {
+		if errors.Is(err, service.ErrAccessDenied) {
 			util.Error(w, http.StatusForbidden, "access denied")
 			return
 		}
@@ -167,7 +167,7 @@ func (h *OrgHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "orgId")
 	members, err := h.orgSvc.ListMembers(r.Context(), userID, orgID)
 	if err != nil {
-		if strings.Contains(err.Error(), "access denied") {
+		if errors.Is(err, service.ErrAccessDenied) {
 			util.Error(w, http.StatusForbidden, "access denied")
 			return
 		}
@@ -197,12 +197,12 @@ func (h *OrgHandler) InviteMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.orgSvc.InviteMember(r.Context(), userID, orgID, body.Email, body.Role); err != nil {
-		msg := err.Error()
-		if strings.Contains(msg, "access denied") {
+		switch {
+		case errors.Is(err, service.ErrAccessDenied):
 			util.Error(w, http.StatusForbidden, "access denied")
-		} else if strings.Contains(msg, "invalid role") {
+		case errors.Is(err, service.ErrInvalidInput):
 			util.Error(w, http.StatusBadRequest, "invalid role")
-		} else {
+		default:
 			util.Error(w, http.StatusInternalServerError, "failed to invite member")
 		}
 		return
@@ -227,12 +227,12 @@ func (h *OrgHandler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.orgSvc.UpdateMemberRole(r.Context(), userID, orgID, targetUserID, body.Role); err != nil {
-		msg := err.Error()
-		if strings.Contains(msg, "access denied") {
+		switch {
+		case errors.Is(err, service.ErrAccessDenied):
 			util.Error(w, http.StatusForbidden, "access denied")
-		} else if strings.Contains(msg, "invalid role") {
+		case errors.Is(err, service.ErrInvalidInput):
 			util.Error(w, http.StatusBadRequest, "invalid role")
-		} else {
+		default:
 			util.Error(w, http.StatusInternalServerError, "failed to update member role")
 		}
 		return
@@ -246,12 +246,12 @@ func (h *OrgHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	orgID := chi.URLParam(r, "orgId")
 	targetUserID := chi.URLParam(r, "userId")
 	if err := h.orgSvc.RemoveMember(r.Context(), userID, orgID, targetUserID); err != nil {
-		msg := err.Error()
-		if strings.Contains(msg, "access denied") {
+		switch {
+		case errors.Is(err, service.ErrAccessDenied):
 			util.Error(w, http.StatusForbidden, "access denied")
-		} else if strings.Contains(msg, "cannot remove yourself") {
+		case errors.Is(err, service.ErrInvalidInput):
 			util.Error(w, http.StatusBadRequest, "cannot remove yourself from organization")
-		} else {
+		default:
 			util.Error(w, http.StatusInternalServerError, "failed to remove member")
 		}
 		return

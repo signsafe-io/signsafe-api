@@ -2,11 +2,10 @@ package handler
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 
@@ -35,34 +34,6 @@ type ContractHandler struct {
 // NewContractHandler creates a new ContractHandler.
 func NewContractHandler(contractSvc *service.ContractService, auditSvc *service.AuditService) *ContractHandler {
 	return &ContractHandler{contractSvc: contractSvc, auditSvc: auditSvc}
-}
-
-// logAudit records an audit event in a best-effort, non-blocking way.
-// A failure to write the audit log never blocks or fails the original request.
-func (h *ContractHandler) logAudit(r *http.Request, action string, targetType, targetID, orgID *string) {
-	ipAddr := r.RemoteAddr
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		ipAddr = host
-	}
-	userAgent := r.UserAgent()
-	userID := middleware.UserIDFromContext(r.Context())
-
-	req := service.CreateAuditEventRequest{
-		Action:         action,
-		TargetType:     targetType,
-		TargetID:       targetID,
-		OrganizationID: orgID,
-		IPAddress:      &ipAddr,
-		UserAgent:      &userAgent,
-	}
-	if userID != "" {
-		req.ActorID = &userID
-	}
-	// Fire-and-forget: use context.Background() so the audit write is not
-	// cancelled when the HTTP request context is done.
-	go func() {
-		_, _ = h.auditSvc.CreateAuditEvent(context.Background(), req)
-	}()
 }
 
 // Upload handles POST /contracts
@@ -197,7 +168,7 @@ func (h *ContractHandler) GetIngestionJob(w http.ResponseWriter, r *http.Request
 
 	job, err := h.contractSvc.GetIngestionJob(r.Context(), jobID, userID)
 	if err != nil {
-		if err.Error() == "contractService.GetIngestionJob: access denied" {
+		if errors.Is(err, service.ErrAccessDenied) {
 			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
 			return
 		}
@@ -296,18 +267,18 @@ func (h *ContractHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.contractSvc.DeleteContract(r.Context(), contractID, userID); err != nil {
 		switch {
-		case err.Error() == "contractService.DeleteContract: contract not found":
+		case errors.Is(err, service.ErrNotFound):
 			util.Error(w, http.StatusNotFound, "contract not found")
-		case err.Error() == "contractService.DeleteContract: access denied":
+		case errors.Is(err, service.ErrAccessDenied):
 			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
 		default:
-			util.Error(w, http.StatusInternalServerError, "failed to delete contract: "+err.Error())
+			util.Error(w, http.StatusInternalServerError, "failed to delete contract")
 		}
 		return
 	}
 
 	targetType := "contract"
-	h.logAudit(r, "CONTRACT_DELETED", &targetType, &contractID, nil)
+	logAuditEvent(r, h.auditSvc, "CONTRACT_DELETED", &targetType, &contractID, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -347,19 +318,19 @@ func (h *ContractHandler) Update(w http.ResponseWriter, r *http.Request) {
 	updated, err := h.contractSvc.UpdateContract(r.Context(), contractID, userID, req)
 	if err != nil {
 		switch {
-		case err.Error() == "contractService.UpdateContract: contract not found":
+		case errors.Is(err, service.ErrNotFound):
 			util.Error(w, http.StatusNotFound, "contract not found")
-		case err.Error() == "contractService.UpdateContract: access denied":
+		case errors.Is(err, service.ErrAccessDenied):
 			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
 		default:
-			util.Error(w, http.StatusInternalServerError, "failed to update contract: "+err.Error())
+			util.Error(w, http.StatusInternalServerError, "failed to update contract")
 		}
 		return
 	}
 
 	targetType := "contract"
 	orgID := updated.OrganizationID
-	h.logAudit(r, "CONTRACT_UPDATED", &targetType, &contractID, &orgID)
+	logAuditEvent(r, h.auditSvc, "CONTRACT_UPDATED", &targetType, &contractID, &orgID)
 
 	util.JSON(w, http.StatusOK, updated)
 }
