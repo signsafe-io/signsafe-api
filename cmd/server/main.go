@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -18,6 +19,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/signsafe-io/signsafe-api/internal/cache"
+	"github.com/signsafe-io/signsafe-api/internal/cron"
 	"github.com/signsafe-io/signsafe-api/internal/email"
 	"github.com/signsafe-io/signsafe-api/internal/handler"
 	"github.com/signsafe-io/signsafe-api/internal/middleware"
@@ -45,6 +47,7 @@ func main() {
 	smtpPass := getEnv("SMTP_PASS", "")
 	smtpFrom := getEnv("SMTP_FROM", "")
 	appBaseURL := getEnv("APP_BASE_URL", "https://signsafe-web.dsmhs.kr")
+	expiryAlertDays := getEnvInt("EXPIRY_ALERT_DAYS", 30)
 
 	// --- DB ---
 	db, err := repository.NewDB(databaseURL)
@@ -201,15 +204,19 @@ func main() {
 		})
 	})
 
+	// --- Background jobs ---
+	// Listen for OS signals in a goroutine.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	expiryNotifier := cron.NewExpiryNotifier(userRepo, contractRepo, cacheClient, emailClient, expiryAlertDays)
+	go expiryNotifier.Start(ctx)
+
 	// --- Server with graceful shutdown ---
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", port),
 		Handler: r,
 	}
-
-	// Listen for OS signals in a goroutine.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer stop()
 
 	go func() {
 		slog.Info("server starting", "addr", srv.Addr)
@@ -291,6 +298,15 @@ func makeHealthHandler(db dbPinger, cacheClient *cache.Client, queueClient *queu
 func getEnv(key, fallback string) string {
 	if v, ok := os.LookupEnv(key); ok {
 		return v
+	}
+	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if v, ok := os.LookupEnv(key); ok {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
 	}
 	return fallback
 }
