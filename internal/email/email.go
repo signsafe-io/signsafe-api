@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/smtp"
 	"strings"
+	"time"
 )
 
 // Client sends emails via SMTP.
@@ -284,4 +285,97 @@ func (c *Client) SendInvitationEmail(to, orgName, inviterName, signupURL string)
 </html>`, inviterName, orgName, signupURL, signupURL)
 
 	return c.sendHTML(to, subject, body)
+}
+
+// ExpiringContractInfo holds minimal info about a contract for the expiry alert email.
+type ExpiringContractInfo struct {
+	Title     string
+	ExpiresAt time.Time
+}
+
+// SendExpiryAlertEmail notifies an org admin that one or more contracts are expiring soon.
+// contracts is a slice of ExpiringContractInfo describing which contracts are about to expire.
+func (c *Client) SendExpiryAlertEmail(to, orgName string, contracts []ExpiringContractInfo, alertDays int) error {
+	subject := fmt.Sprintf("[SignSafe] %s 조직 계약 만료 알림 (%d건)", orgName, len(contracts))
+
+	var rows strings.Builder
+	for _, ct := range contracts {
+		daysLeft := int(time.Until(ct.ExpiresAt).Hours() / 24)
+		daysLabel := fmt.Sprintf("D-%d", daysLeft)
+		if daysLeft == 0 {
+			daysLabel = "오늘 만료"
+		}
+		rows.WriteString(fmt.Sprintf(`
+            <tr style="border-top:1px solid #f4f4f5;">
+              <td style="padding:10px 0;font-size:13px;color:#18181b;">%s</td>
+              <td style="padding:10px 0;font-size:13px;color:#71717a;text-align:right;">%s &nbsp;<strong style="color:#dc2626;">%s</strong></td>
+            </tr>`,
+			htmlEscape(ct.Title),
+			ct.ExpiresAt.Format("2006-01-02"),
+			daysLabel,
+		))
+	}
+
+	contractsURL := fmt.Sprintf("%s/contracts", c.appURL)
+	body := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <tr>
+          <td style="background:#18181b;padding:32px 40px;">
+            <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">SignSafe</p>
+            <p style="margin:4px 0 0;font-size:12px;color:#a1a1aa;">계약서 리스크 분석 플랫폼</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:40px;">
+            <p style="margin:0 0 8px;font-size:22px;font-weight:600;color:#18181b;">계약 만료 알림</p>
+            <p style="margin:0 0 24px;font-size:14px;color:#71717a;line-height:1.6;">
+              <strong style="color:#18181b;">%s</strong> 조직에서 <strong style="color:#dc2626;">%d일 이내</strong> 만료 예정인 계약이 <strong>%d건</strong> 있습니다.
+            </p>
+            <!-- Contract list -->
+            <table width="100%%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border:1px solid #f4f4f5;border-radius:8px;overflow:hidden;">
+              <tr style="background:#f9f9f9;">
+                <td style="padding:10px 12px;font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.05em;">계약명</td>
+                <td style="padding:10px 12px;font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.05em;text-align:right;">만료일</td>
+              </tr>
+              %s
+            </table>
+            <!-- CTA -->
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#18181b;border-radius:8px;">
+                  <a href="%s" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">계약 목록 보기</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 40px;border-top:1px solid #f4f4f5;">
+            <p style="margin:0;font-size:12px;color:#a1a1aa;">
+              이 알림은 매일 자동 발송됩니다. SignSafe 대시보드에서 만료 설정을 관리하세요.<br>
+              © 2026 SignSafe. All rights reserved.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`, htmlEscape(orgName), alertDays, len(contracts), rows.String(), contractsURL)
+
+	return c.sendHTML(to, subject, body)
+}
+
+// htmlEscape escapes basic HTML special characters in user-provided strings.
+func htmlEscape(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "\"", "&#34;")
+	return s
 }

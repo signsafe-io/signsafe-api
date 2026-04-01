@@ -545,3 +545,36 @@ func (r *UserRepo) DeleteInvitation(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// OrgAdmin holds minimal info about an organization admin.
+type OrgAdmin struct {
+	UserID string `db:"user_id"`
+	Email  string `db:"email"`
+}
+
+// ListAllOrganizations returns all organizations in the system.
+// Used by background jobs that process every org.
+func (r *UserRepo) ListAllOrganizations(ctx context.Context) ([]model.Organization, error) {
+	var orgs []model.Organization
+	err := r.db.SelectContext(ctx, &orgs, `SELECT * FROM organizations ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("userRepo.ListAllOrganizations: %w", err)
+	}
+	return orgs, nil
+}
+
+// ListOrgAdmins returns all admin-role members of the given organization.
+func (r *UserRepo) ListOrgAdmins(ctx context.Context, orgID string) ([]OrgAdmin, error) {
+	var admins []OrgAdmin
+	err := r.db.SelectContext(ctx, &admins, `
+		SELECT uo.user_id, u.email
+		FROM user_organizations uo
+		JOIN users u ON u.id = uo.user_id
+		WHERE uo.organization_id = $1
+		  AND uo.role = 'admin'
+		ORDER BY uo.joined_at ASC`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("userRepo.ListOrgAdmins: %w", err)
+	}
+	return admins, nil
+}
