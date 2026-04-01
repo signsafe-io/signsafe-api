@@ -189,7 +189,10 @@ func main() {
 			r.Post("/retrieve", evidenceHandler.RetrieveEvidence)
 		})
 
-		r.Post("/audit-events", auditHandler.CreateAuditEvent)
+		r.Route("/audit-events", func(r chi.Router) {
+			r.Get("/", auditHandler.ListAuditEvents)
+			r.Post("/", auditHandler.CreateAuditEvent)
+		})
 	})
 
 	// --- Server with graceful shutdown ---
