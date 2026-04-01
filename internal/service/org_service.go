@@ -108,11 +108,12 @@ func (s *OrgService) UpdateOrganization(ctx context.Context, userID, orgID, name
 
 // MemberInfo is the public view of a member.
 type MemberInfo struct {
-	UserID   string `json:"userId"`
-	Email    string `json:"email"`
-	FullName string `json:"fullName"`
-	Role     string `json:"role"`
-	JoinedAt string `json:"joinedAt"`
+	UserID        string `json:"userId"`
+	Email         string `json:"email"`
+	FullName      string `json:"fullName"`
+	Role          string `json:"role"`
+	JoinedAt      string `json:"joinedAt"`
+	EmailVerified bool   `json:"emailVerified"`
 }
 
 // ListMembers returns members of an org if the requesting user is a member.
@@ -131,11 +132,12 @@ func (s *OrgService) ListMembers(ctx context.Context, userID, orgID string) ([]M
 	out := make([]MemberInfo, len(rows))
 	for i, m := range rows {
 		out[i] = MemberInfo{
-			UserID:   m.UserID,
-			Email:    m.Email,
-			FullName: m.FullName,
-			Role:     m.Role,
-			JoinedAt: m.JoinedAt.Format("2006-01-02T15:04:05Z"),
+			UserID:        m.UserID,
+			Email:         m.Email,
+			FullName:      m.FullName,
+			Role:          m.Role,
+			JoinedAt:      m.JoinedAt.Format("2006-01-02T15:04:05Z"),
+			EmailVerified: m.EmailVerified,
 		}
 	}
 	return out, nil

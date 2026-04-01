@@ -434,18 +434,19 @@ func (r *UserRepo) UpdateFullName(ctx context.Context, userID, fullName string) 
 
 // OrgMember holds member info returned by ListOrgMembers.
 type OrgMember struct {
-	UserID   string    `db:"user_id"`
-	Email    string    `db:"email"`
-	FullName string    `db:"full_name"`
-	Role     string    `db:"role"`
-	JoinedAt time.Time `db:"joined_at"`
+	UserID        string    `db:"user_id"`
+	Email         string    `db:"email"`
+	FullName      string    `db:"full_name"`
+	Role          string    `db:"role"`
+	JoinedAt      time.Time `db:"joined_at"`
+	EmailVerified bool      `db:"email_verified"`
 }
 
 // ListOrgMembers returns all members of an organization.
 func (r *UserRepo) ListOrgMembers(ctx context.Context, orgID string) ([]OrgMember, error) {
 	var members []OrgMember
 	err := r.db.SelectContext(ctx, &members, `
-		SELECT uo.user_id, u.email, u.full_name, uo.role, uo.joined_at
+		SELECT uo.user_id, u.email, u.full_name, uo.role, uo.joined_at, u.email_verified
 		FROM user_organizations uo
 		JOIN users u ON u.id = uo.user_id
 		WHERE uo.organization_id = $1
