@@ -106,6 +106,9 @@ func main() {
 	auditRepo := repository.NewAuditRepo(db)
 	auditSvc := service.NewAuditService(auditRepo)
 
+	statsRepo := repository.NewStatsRepo(db)
+	statsSvc := service.NewStatsService(statsRepo, userRepo)
+
 	// --- Handlers ---
 	authHandler := handler.NewAuthHandler(authSvc, orgSvc)
 	orgHandler := handler.NewOrgHandler(orgSvc, authSvc)
@@ -113,6 +116,7 @@ func main() {
 	analysisHandler := handler.NewAnalysisHandler(analysisSvc, auditSvc)
 	evidenceHandler := handler.NewEvidenceHandler(evidenceSvc)
 	auditHandler := handler.NewAuditHandler(auditSvc)
+	statsHandler := handler.NewStatsHandler(statsSvc)
 
 	// --- Router ---
 	r := chi.NewRouter()
@@ -157,6 +161,7 @@ func main() {
 			r.Post("/members", orgHandler.InviteMember)
 			r.Patch("/members/{userId}", orgHandler.UpdateMemberRole)
 			r.Delete("/members/{userId}", orgHandler.RemoveMember)
+			r.Get("/stats", statsHandler.GetOrgStats)
 		})
 
 		r.Route("/contracts", func(r chi.Router) {
