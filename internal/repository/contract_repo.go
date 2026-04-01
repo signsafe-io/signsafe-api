@@ -23,6 +23,12 @@ type ContractUpdate struct {
 	ExpiresAt    *time.Time
 }
 
+// ContractFilter holds optional search/filter parameters for ListContracts.
+type ContractFilter struct {
+	Q      string // title ILIKE search
+	Status string // exact status match
+}
+
 // ContractRepo handles DB operations for contracts, ingestion jobs, and clauses.
 type ContractRepo struct {
 	db *sqlx.DB
@@ -63,21 +69,40 @@ func (r *ContractRepo) FindContractByID(ctx context.Context, id string) (*model.
 	return &c, nil
 }
 
-// ListContracts returns a paginated list of contracts for an org.
-func (r *ContractRepo) ListContracts(ctx context.Context, orgID string, limit, offset int) ([]model.Contract, int, error) {
+// ListContracts returns a paginated list of contracts for an org with optional search/filter.
+func (r *ContractRepo) ListContracts(ctx context.Context, orgID string, limit, offset int, filter ContractFilter) ([]model.Contract, int, error) {
+	conditions := []string{"organization_id = $1"}
+	args := []interface{}{orgID}
+	argIdx := 2
+
+	if filter.Q != "" {
+		conditions = append(conditions, fmt.Sprintf("title ILIKE $%d", argIdx))
+		args = append(args, "%"+filter.Q+"%")
+		argIdx++
+	}
+	if filter.Status != "" {
+		conditions = append(conditions, fmt.Sprintf("status = $%d", argIdx))
+		args = append(args, filter.Status)
+		argIdx++
+	}
+
+	whereClause := strings.Join(conditions, " AND ")
+
 	var total int
 	if err := r.db.GetContext(ctx, &total,
-		`SELECT COUNT(*) FROM contracts WHERE organization_id = $1`, orgID); err != nil {
+		fmt.Sprintf(`SELECT COUNT(*) FROM contracts WHERE %s`, whereClause),
+		args...); err != nil {
 		return nil, 0, fmt.Errorf("contractRepo.ListContracts count: %w", err)
 	}
 
+	listArgs := append(args, limit, offset)
 	var contracts []model.Contract
-	err := r.db.SelectContext(ctx, &contracts, `
+	err := r.db.SelectContext(ctx, &contracts, fmt.Sprintf(`
 		SELECT * FROM contracts
-		WHERE organization_id = $1
+		WHERE %s
 		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3`,
-		orgID, limit, offset)
+		LIMIT $%d OFFSET $%d`, whereClause, argIdx, argIdx+1),
+		listArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("contractRepo.ListContracts: %w", err)
 	}
@@ -107,6 +132,18 @@ func (r *ContractRepo) FindIngestionJobByID(ctx context.Context, id string) (*mo
 		return nil, fmt.Errorf("contractRepo.FindIngestionJobByID: %w", err)
 	}
 	return &job, nil
+}
+
+// ListIngestionJobsByContractID returns all ingestion jobs for a contract, newest first.
+func (r *ContractRepo) ListIngestionJobsByContractID(ctx context.Context, contractID string) ([]model.IngestionJob, error) {
+	var jobs []model.IngestionJob
+	err := r.db.SelectContext(ctx, &jobs,
+		`SELECT * FROM ingestion_jobs WHERE contract_id = $1 ORDER BY created_at DESC`,
+		contractID)
+	if err != nil {
+		return nil, fmt.Errorf("contractRepo.ListIngestionJobsByContractID: %w", err)
+	}
+	return jobs, nil
 }
 
 // ListClausesByContractID returns all clauses for a contract ordered by index.

@@ -129,6 +129,32 @@ func (s *ContractService) GetIngestionJob(ctx context.Context, jobID, requestedB
 	return job, nil
 }
 
+// ListIngestionJobsByContract returns all ingestion jobs for a contract.
+// requestedBy must be a member of the contract's organization.
+func (s *ContractService) ListIngestionJobsByContract(ctx context.Context, contractID, requestedBy string) ([]model.IngestionJob, error) {
+	c, err := s.repo.FindContractByID(ctx, contractID)
+	if err != nil {
+		return nil, fmt.Errorf("contractService.ListIngestionJobsByContract: find contract: %w", err)
+	}
+	if c == nil {
+		return nil, fmt.Errorf("contractService.ListIngestionJobsByContract: contract not found")
+	}
+
+	member, err := s.userRepo.IsOrgMember(ctx, requestedBy, c.OrganizationID)
+	if err != nil {
+		return nil, fmt.Errorf("contractService.ListIngestionJobsByContract: check membership: %w", err)
+	}
+	if !member {
+		return nil, fmt.Errorf("contractService.ListIngestionJobsByContract: access denied")
+	}
+
+	jobs, err := s.repo.ListIngestionJobsByContractID(ctx, contractID)
+	if err != nil {
+		return nil, fmt.Errorf("contractService.ListIngestionJobsByContract: %w", err)
+	}
+	return jobs, nil
+}
+
 // IsOrgMember returns true when userID belongs to orgID.
 func (s *ContractService) IsOrgMember(ctx context.Context, userID, orgID string) (bool, error) {
 	member, err := s.userRepo.IsOrgMember(ctx, userID, orgID)
@@ -138,8 +164,14 @@ func (s *ContractService) IsOrgMember(ctx context.Context, userID, orgID string)
 	return member, nil
 }
 
-// ListContracts returns a paginated list of contracts.
-func (s *ContractService) ListContracts(ctx context.Context, orgID string, page, pageSize int) ([]model.Contract, int, error) {
+// ContractListFilter holds optional search/filter parameters for ListContracts.
+type ContractListFilter struct {
+	Q      string
+	Status string
+}
+
+// ListContracts returns a paginated, optionally filtered list of contracts.
+func (s *ContractService) ListContracts(ctx context.Context, orgID string, page, pageSize int, filter ContractListFilter) ([]model.Contract, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -147,7 +179,10 @@ func (s *ContractService) ListContracts(ctx context.Context, orgID string, page,
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize
-	contracts, total, err := s.repo.ListContracts(ctx, orgID, pageSize, offset)
+	contracts, total, err := s.repo.ListContracts(ctx, orgID, pageSize, offset, repository.ContractFilter{
+		Q:      filter.Q,
+		Status: filter.Status,
+	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("contractService.ListContracts: %w", err)
 	}

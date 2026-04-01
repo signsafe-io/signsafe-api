@@ -169,6 +169,7 @@ func main() {
 				r.Get("/file", contractHandler.GetFile)
 				r.Get("/clauses", contractHandler.ListClauses)
 				r.Get("/snippets", contractHandler.GetSnippets)
+				r.Get("/ingestion-jobs", contractHandler.ListIngestionJobs)
 				r.Get("/risk-analyses", analysisHandler.GetLatestAnalysis)
 				r.Post("/risk-analyses", analysisHandler.CreateAnalysis)
 			})
@@ -279,7 +280,7 @@ func makeHealthHandler(db dbPinger, cacheClient *cache.Client, queueClient *queu
 }
 
 func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
+	if v, ok := os.LookupEnv(key); ok {
 		return v
 	}
 	return fallback
