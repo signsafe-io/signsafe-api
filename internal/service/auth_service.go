@@ -152,7 +152,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Token
 	}
 
 	if !u.EmailVerified {
-		return nil, fmt.Errorf("authService.Login: email not verified")
+		return nil, fmt.Errorf("authService.Login: %w", ErrEmailNotVerified)
 	}
 
 	return s.issueTokens(ctx, u)
