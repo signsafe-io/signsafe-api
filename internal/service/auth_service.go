@@ -304,6 +304,7 @@ type GetMeResult struct {
 	User             *model.User
 	OrganizationID   string
 	OrganizationName string
+	OrganizationRole string
 }
 
 // GetMe returns the full user details with their primary organization ID and name.
@@ -321,13 +322,18 @@ func (s *AuthService) GetMe(ctx context.Context, userID string) (*GetMeResult, e
 		return nil, fmt.Errorf("authService.GetMe: find org: %w", err)
 	}
 
-	orgID, orgName := "", ""
+	orgID, orgName, orgRole := "", "", ""
 	if org != nil {
 		orgID = org.ID
 		orgName = org.Name
+		role, err := s.userRepo.GetMemberRole(ctx, userID, orgID)
+		if err != nil {
+			return nil, fmt.Errorf("authService.GetMe: get role: %w", err)
+		}
+		orgRole = role
 	}
 
-	return &GetMeResult{User: u, OrganizationID: orgID, OrganizationName: orgName}, nil
+	return &GetMeResult{User: u, OrganizationID: orgID, OrganizationName: orgName, OrganizationRole: orgRole}, nil
 }
 
 // --- internal helpers ---

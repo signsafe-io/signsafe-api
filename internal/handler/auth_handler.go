@@ -263,6 +263,7 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		"permissions":      defaultPermissions(u.Role),
 		"organizationId":   result.OrganizationID,
 		"organizationName": result.OrganizationName,
+		"organizationRole": result.OrganizationRole,
 	})
 }
 
