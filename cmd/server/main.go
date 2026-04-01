@@ -162,6 +162,7 @@ func main() {
 			r.Patch("/members/{userId}", orgHandler.UpdateMemberRole)
 			r.Delete("/members/{userId}", orgHandler.RemoveMember)
 			r.Get("/stats", statsHandler.GetOrgStats)
+			r.Get("/contracts/expiring-soon", contractHandler.ListExpiringSoon)
 		})
 
 		r.Route("/contracts", func(r chi.Router) {

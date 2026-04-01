@@ -15,6 +15,7 @@ type DashboardStats struct {
 	ReadyContracts      int                         `json:"readyContracts"`
 	FailedContracts     int                         `json:"failedContracts"`
 	RecentAnalyses      int                         `json:"recentAnalyses"`
+	ExpiringSoon        int                         `json:"expiringSoon"` // expires within 30 days
 	RiskDistribution    repository.RiskDistribution `json:"riskDistribution"`
 	RecentContracts     []repository.RecentContract `json:"recentContracts"`
 }
@@ -67,6 +68,7 @@ func (s *StatsService) GetDashboardStats(ctx context.Context, userID, orgID stri
 		ReadyContracts:      orgStats.ReadyContracts,
 		FailedContracts:     orgStats.FailedContracts,
 		RecentAnalyses:      orgStats.RecentAnalyses,
+		ExpiringSoon:        orgStats.ExpiringSoon,
 		RiskDistribution:    *riskDist,
 		RecentContracts:     recentContracts,
 	}, nil
