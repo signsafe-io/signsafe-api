@@ -120,7 +120,12 @@ func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
 
-	contracts, total, err := h.contractSvc.ListContracts(r.Context(), orgID, page, pageSize)
+	filter := service.ContractListFilter{
+		Q:      r.URL.Query().Get("q"),
+		Status: r.URL.Query().Get("status"),
+	}
+
+	contracts, total, err := h.contractSvc.ListContracts(r.Context(), orgID, page, pageSize, filter)
 	if err != nil {
 		util.Error(w, http.StatusInternalServerError, "failed to list contracts")
 		return
@@ -180,6 +185,30 @@ func (h *ContractHandler) GetIngestionJob(w http.ResponseWriter, r *http.Request
 		return
 	}
 	util.JSON(w, http.StatusOK, job)
+}
+
+// ListIngestionJobs handles GET /contracts/{contractId}/ingestion-jobs
+func (h *ContractHandler) ListIngestionJobs(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "contractId")
+	userID := middleware.UserIDFromContext(r.Context())
+
+	jobs, err := h.contractSvc.ListIngestionJobsByContract(r.Context(), contractID, userID)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrNotFound):
+			util.Error(w, http.StatusNotFound, "contract not found")
+		case errors.Is(err, service.ErrAccessDenied):
+			util.Error(w, http.StatusForbidden, "access denied: not a member of this organization")
+		default:
+			util.Error(w, http.StatusInternalServerError, "failed to list ingestion jobs")
+		}
+		return
+	}
+
+	util.JSON(w, http.StatusOK, map[string]interface{}{
+		"jobs":  jobs,
+		"total": len(jobs),
+	})
 }
 
 // ListClauses handles GET /contracts/{contractId}/clauses
