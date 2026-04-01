@@ -117,7 +117,7 @@ func (r *StatsRepo) GetRiskDistribution(ctx context.Context, orgID string) (*Ris
 
 // ListRecentContracts returns the most recent contracts for an org.
 func (r *StatsRepo) ListRecentContracts(ctx context.Context, orgID string, limit int) ([]RecentContract, error) {
-	var contracts []RecentContract
+	contracts := make([]RecentContract, 0)
 	err := r.db.SelectContext(ctx, &contracts, `
 		SELECT id, title, status, created_at::text
 		FROM contracts
