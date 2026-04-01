@@ -15,6 +15,7 @@ type OrgStats struct {
 	ReadyContracts      int `db:"ready_contracts"      json:"readyContracts"`
 	FailedContracts     int `db:"failed_contracts"     json:"failedContracts"`
 	RecentAnalyses      int `db:"recent_analyses"      json:"recentAnalyses"` // last 30 days
+	ExpiringSoon        int `db:"expiring_soon"        json:"expiringSoon"`   // expires within 30 days
 }
 
 // RiskDistribution holds the count of clause results at each risk level for an org.
@@ -58,7 +59,12 @@ func (r *StatsRepo) GetOrgStats(ctx context.Context, orgID string) (*OrgStats, e
 				JOIN contracts c2 ON c2.id = ra.contract_id
 				WHERE c2.organization_id = $1
 				  AND ra.created_at >= NOW() - INTERVAL '30 days'
-			)                                                                AS recent_analyses
+			)                                                                AS recent_analyses,
+			COUNT(*) FILTER (
+				WHERE expires_at IS NOT NULL
+				  AND expires_at > NOW()
+				  AND expires_at <= NOW() + INTERVAL '30 days'
+			)                                                                AS expiring_soon
 		FROM contracts
 		WHERE organization_id = $1`,
 		orgID)

@@ -139,6 +139,35 @@ func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ListExpiringSoon handles GET /organizations/{orgId}/contracts/expiring-soon
+// Query params:
+//   - days (int, default 30): return contracts expiring within this many days
+func (h *ContractHandler) ListExpiringSoon(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "orgId")
+	userID := middleware.UserIDFromContext(r.Context())
+
+	days := 30
+	if d, err := strconv.Atoi(r.URL.Query().Get("days")); err == nil && d > 0 {
+		days = d
+	}
+
+	contracts, err := h.contractSvc.ListExpiringContracts(r.Context(), orgID, userID, days)
+	if err != nil {
+		if errors.Is(err, service.ErrAccessDenied) {
+			util.Error(w, http.StatusForbidden, "access denied")
+			return
+		}
+		util.Error(w, http.StatusInternalServerError, "failed to list expiring contracts")
+		return
+	}
+
+	util.JSON(w, http.StatusOK, map[string]interface{}{
+		"contracts": contracts,
+		"total":     len(contracts),
+		"days":      days,
+	})
+}
+
 // Get handles GET /contracts/{contractId}
 func (h *ContractHandler) Get(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "contractId")

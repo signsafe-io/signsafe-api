@@ -109,6 +109,25 @@ func (r *ContractRepo) ListContracts(ctx context.Context, orgID string, limit, o
 	return contracts, total, nil
 }
 
+// ListExpiringContracts returns contracts expiring within the given number of days,
+// ordered by expires_at ascending (soonest first).
+// Only contracts with a non-null expires_at in the future (and within the window) are returned.
+func (r *ContractRepo) ListExpiringContracts(ctx context.Context, orgID string, days int) ([]model.Contract, error) {
+	var contracts []model.Contract
+	err := r.db.SelectContext(ctx, &contracts, `
+		SELECT * FROM contracts
+		WHERE organization_id = $1
+		  AND expires_at IS NOT NULL
+		  AND expires_at > NOW()
+		  AND expires_at <= NOW() + ($2 * INTERVAL '1 day')
+		ORDER BY expires_at ASC`,
+		orgID, days)
+	if err != nil {
+		return nil, fmt.Errorf("contractRepo.ListExpiringContracts: %w", err)
+	}
+	return contracts, nil
+}
+
 // CreateIngestionJob inserts a new ingestion job.
 func (r *ContractRepo) CreateIngestionJob(ctx context.Context, job *model.IngestionJob) error {
 	_, err := r.db.ExecContext(ctx, `

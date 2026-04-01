@@ -189,6 +189,28 @@ func (s *ContractService) ListContracts(ctx context.Context, orgID string, page,
 	return contracts, total, nil
 }
 
+// ListExpiringContracts returns contracts expiring within the given number of days.
+// The user must be a member of the organization.
+func (s *ContractService) ListExpiringContracts(ctx context.Context, orgID, userID string, days int) ([]model.Contract, error) {
+	member, err := s.userRepo.IsOrgMember(ctx, userID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("contractService.ListExpiringContracts: check membership: %w", err)
+	}
+	if !member {
+		return nil, ErrAccessDenied
+	}
+
+	if days < 1 || days > 365 {
+		days = 30
+	}
+
+	contracts, err := s.repo.ListExpiringContracts(ctx, orgID, days)
+	if err != nil {
+		return nil, fmt.Errorf("contractService.ListExpiringContracts: %w", err)
+	}
+	return contracts, nil
+}
+
 // GetContract returns a single contract by ID.
 func (s *ContractService) GetContract(ctx context.Context, contractID string) (*model.Contract, error) {
 	c, err := s.repo.FindContractByID(ctx, contractID)
