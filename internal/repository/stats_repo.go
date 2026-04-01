@@ -15,7 +15,10 @@ type OrgStats struct {
 	ReadyContracts      int `db:"ready_contracts"      json:"readyContracts"`
 	FailedContracts     int `db:"failed_contracts"     json:"failedContracts"`
 	RecentAnalyses      int `db:"recent_analyses"      json:"recentAnalyses"` // last 30 days
-	ExpiringSoon        int `db:"expiring_soon"        json:"expiringSoon"`   // expires within 30 days
+	ExpiringSoon        int `db:"expiring_soon"        json:"expiringSoon"`   // expires within 30 days (= Expiring30)
+	Expiring30          int `db:"expiring_30"          json:"expiring30"`     // expires within 30 days
+	Expiring60          int `db:"expiring_60"          json:"expiring60"`     // expires within 60 days
+	Expiring90          int `db:"expiring_90"          json:"expiring90"`     // expires within 90 days
 }
 
 // RiskDistribution holds the count of clause results at each risk level for an org.
@@ -44,6 +47,8 @@ func NewStatsRepo(db *sqlx.DB) *StatsRepo {
 }
 
 // GetOrgStats returns contract counts and recent analysis count for an org.
+// Expiry buckets count contracts expiring within 30/60/90 days from now.
+// Already-expired contracts are excluded from all buckets.
 func (r *StatsRepo) GetOrgStats(ctx context.Context, orgID string) (*OrgStats, error) {
 	var s OrgStats
 	err := r.db.GetContext(ctx, &s, `
@@ -64,7 +69,22 @@ func (r *StatsRepo) GetOrgStats(ctx context.Context, orgID string) (*OrgStats, e
 				WHERE expires_at IS NOT NULL
 				  AND expires_at > NOW()
 				  AND expires_at <= NOW() + INTERVAL '30 days'
-			)                                                                AS expiring_soon
+			)                                                                AS expiring_soon,
+			COUNT(*) FILTER (
+				WHERE expires_at IS NOT NULL
+				  AND expires_at > NOW()
+				  AND expires_at <= NOW() + INTERVAL '30 days'
+			)                                                                AS expiring_30,
+			COUNT(*) FILTER (
+				WHERE expires_at IS NOT NULL
+				  AND expires_at > NOW()
+				  AND expires_at <= NOW() + INTERVAL '60 days'
+			)                                                                AS expiring_60,
+			COUNT(*) FILTER (
+				WHERE expires_at IS NOT NULL
+				  AND expires_at > NOW()
+				  AND expires_at <= NOW() + INTERVAL '90 days'
+			)                                                                AS expiring_90
 		FROM contracts
 		WHERE organization_id = $1`,
 		orgID)

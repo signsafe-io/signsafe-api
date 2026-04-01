@@ -7,6 +7,13 @@ import (
 	"github.com/signsafe-io/signsafe-api/internal/repository"
 )
 
+// ExpiryBuckets holds contract counts expiring within 30, 60, and 90 days.
+type ExpiryBuckets struct {
+	Days30 int `json:"days30"`
+	Days60 int `json:"days60"`
+	Days90 int `json:"days90"`
+}
+
 // DashboardStats is the full response for the dashboard statistics endpoint.
 type DashboardStats struct {
 	TotalContracts      int                         `json:"totalContracts"`
@@ -15,7 +22,8 @@ type DashboardStats struct {
 	ReadyContracts      int                         `json:"readyContracts"`
 	FailedContracts     int                         `json:"failedContracts"`
 	RecentAnalyses      int                         `json:"recentAnalyses"`
-	ExpiringSoon        int                         `json:"expiringSoon"` // expires within 30 days
+	ExpiringSoon        int                         `json:"expiringSoon"` // = ExpiryBuckets.Days30, kept for backward compat
+	ExpiryBuckets       ExpiryBuckets               `json:"expiryBuckets"`
 	RiskDistribution    repository.RiskDistribution `json:"riskDistribution"`
 	RecentContracts     []repository.RecentContract `json:"recentContracts"`
 }
@@ -69,7 +77,12 @@ func (s *StatsService) GetDashboardStats(ctx context.Context, userID, orgID stri
 		FailedContracts:     orgStats.FailedContracts,
 		RecentAnalyses:      orgStats.RecentAnalyses,
 		ExpiringSoon:        orgStats.ExpiringSoon,
-		RiskDistribution:    *riskDist,
-		RecentContracts:     recentContracts,
+		ExpiryBuckets: ExpiryBuckets{
+			Days30: orgStats.Expiring30,
+			Days60: orgStats.Expiring60,
+			Days90: orgStats.Expiring90,
+		},
+		RiskDistribution: *riskDist,
+		RecentContracts:  recentContracts,
 	}, nil
 }

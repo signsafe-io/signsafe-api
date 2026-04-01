@@ -122,3 +122,29 @@
 - `audit_handler.go`의 인라인 IP 추출 코드도 `clientIP()` helper로 대체
 
 **영향**: 없음 (동작 동일)
+
+---
+
+## 2026-04-01: 대시보드 만료 구간별 통계 추가
+
+**결정**: `GET /organizations/{orgId}/stats` 응답에 `expiryBuckets { days30, days60, days90 }` 추가.
+
+**이유**:
+- 기존 `expiringSoon`(30일)만으로는 계약 갱신 우선순위 판단 부족
+- 30/60/90일 구간을 단일 SQL 쿼리(`COUNT(*) FILTER (WHERE ...)` 3개)로 추가 → 쿼리 수 변동 없음
+- 기존 `expiringSoon` 필드는 하위 호환을 위해 유지 (`= expiring30` 값)
+
+**영향**: 마이그레이션 불필요 (DB 스키마 변경 없음, SQL 집계만 변경)
+
+---
+
+## 2026-04-01: confidence score 마이그레이션
+
+**결정**: `clause_results.confidence FLOAT NOT NULL DEFAULT 0.5` 컬럼 추가 (migration 000006).
+
+**이유**:
+- signsafe-ai LLM 분석 결과에 신뢰도 0~1 포함
+- 기존 행에는 DEFAULT 0.5 적용 (중립값)
+- NOT NULL로 선언하여 API 응답에서 null 처리 불필요
+
+**영향**: signsafe-ai `insert_clause_result` SQL 업데이트 필요 (완료)
