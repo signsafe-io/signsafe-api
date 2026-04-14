@@ -4,53 +4,64 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// Client wraps a RabbitMQ connection and channel.
+// Client wraps a RabbitMQ connection and channel with automatic reconnection.
 type Client struct {
+	amqpURL string
+	mu      sync.Mutex
 	conn    *amqp.Connection
 	channel *amqp.Channel
 }
 
 // NewClient establishes a connection to RabbitMQ and declares the required queues.
 func NewClient(amqpURL string) (*Client, error) {
-	conn, err := amqp.Dial(amqpURL)
+	c := &Client{amqpURL: amqpURL}
+	if err := c.connect(); err != nil {
+		return nil, fmt.Errorf("queue.NewClient: %w", err)
+	}
+	return c, nil
+}
+
+// connect (re)establishes the AMQP connection and channel, then declares queues.
+// Caller must hold c.mu or be in a single-goroutine context (e.g. NewClient).
+func (c *Client) connect() error {
+	conn, err := amqp.Dial(c.amqpURL)
 	if err != nil {
-		return nil, fmt.Errorf("queue.NewClient: dial: %w", err)
+		return fmt.Errorf("dial: %w", err)
 	}
 
 	ch, err := conn.Channel()
 	if err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("queue.NewClient: channel: %w", err)
+		return fmt.Errorf("channel: %w", err)
 	}
 
-	c := &Client{conn: conn, channel: ch}
+	c.conn = conn
+	c.channel = ch
 
-	// Declare queues with DLQ support.
 	queues := []string{"ingestion.jobs", "analysis.jobs"}
 	for _, q := range queues {
 		if err := c.declareQueue(q); err != nil {
-			c.Close()
-			return nil, fmt.Errorf("queue.NewClient: declare %s: %w", q, err)
+			c.conn.Close()
+			return fmt.Errorf("declare %s: %w", q, err)
 		}
 	}
-
-	return c, nil
+	return nil
 }
 
 func (c *Client) declareQueue(name string) error {
 	dlqName := name + ".dlq"
 
-	// Declare DLQ first.
 	_, err := c.channel.QueueDeclare(dlqName, true, false, false, false, nil)
 	if err != nil {
 		return fmt.Errorf("declareQueue %s dlq: %w", dlqName, err)
 	}
 
-	// Declare main queue with dead-letter routing.
 	args := amqp.Table{
 		"x-dead-letter-exchange":    "",
 		"x-dead-letter-routing-key": dlqName,
@@ -62,20 +73,61 @@ func (c *Client) declareQueue(name string) error {
 	return nil
 }
 
+// ensureConnected reconnects if the connection or channel is no longer open.
+func (c *Client) ensureConnected() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conn != nil && !c.conn.IsClosed() && c.channel != nil {
+		return nil
+	}
+
+	slog.Warn("rabbitmq connection lost, reconnecting")
+	if err := c.connect(); err != nil {
+		return fmt.Errorf("queue.reconnect: %w", err)
+	}
+	slog.Info("rabbitmq reconnected")
+	return nil
+}
+
 // Publish marshals v as JSON and publishes it to the named queue.
+// If the channel is closed it reconnects once and retries.
 func (c *Client) Publish(ctx context.Context, queue string, v interface{}) error {
 	body, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Errorf("queue.Publish: marshal: %w", err)
 	}
 
+	if err := c.ensureConnected(); err != nil {
+		return fmt.Errorf("queue.Publish: %w", err)
+	}
+
+	c.mu.Lock()
 	err = c.channel.PublishWithContext(ctx, "", queue, false, false, amqp.Publishing{
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,
 		Body:         body,
 	})
+	c.mu.Unlock()
+
 	if err != nil {
-		return fmt.Errorf("queue.Publish: publish to %s: %w", queue, err)
+		// Channel may have been closed mid-publish; reconnect and retry once.
+		slog.Warn("rabbitmq publish failed, reconnecting and retrying", "queue", queue, "error", err)
+		if reconnErr := c.ensureConnected(); reconnErr != nil {
+			return fmt.Errorf("queue.Publish: retry reconnect: %w", reconnErr)
+		}
+
+		c.mu.Lock()
+		err = c.channel.PublishWithContext(ctx, "", queue, false, false, amqp.Publishing{
+			ContentType:  "application/json",
+			DeliveryMode: amqp.Persistent,
+			Body:         body,
+		})
+		c.mu.Unlock()
+
+		if err != nil {
+			return fmt.Errorf("queue.Publish: publish to %s: %w", queue, err)
+		}
 	}
 	return nil
 }
@@ -93,6 +145,8 @@ func (c *Client) Ping() error {
 
 // Close cleans up channel and connection.
 func (c *Client) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.channel != nil {
 		c.channel.Close()
 	}
