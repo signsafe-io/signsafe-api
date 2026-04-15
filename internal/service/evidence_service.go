@@ -44,7 +44,7 @@ func (s *EvidenceService) checkEvidenceSetAccess(ctx context.Context, es *model.
 		return fmt.Errorf("find clause result: %w", err)
 	}
 	if cr == nil {
-		return fmt.Errorf("clause result not found")
+		return fmt.Errorf("clause result not found: %w", ErrNotFound)
 	}
 
 	a, err := s.analysisRepo.FindAnalysisByID(ctx, cr.AnalysisID)
@@ -52,7 +52,7 @@ func (s *EvidenceService) checkEvidenceSetAccess(ctx context.Context, es *model.
 		return fmt.Errorf("find analysis: %w", err)
 	}
 	if a == nil {
-		return fmt.Errorf("analysis not found")
+		return fmt.Errorf("analysis not found: %w", ErrNotFound)
 	}
 
 	c, err := s.contractRepo.FindContractByID(ctx, a.ContractID)
@@ -60,7 +60,7 @@ func (s *EvidenceService) checkEvidenceSetAccess(ctx context.Context, es *model.
 		return fmt.Errorf("find contract: %w", err)
 	}
 	if c == nil {
-		return fmt.Errorf("contract not found")
+		return fmt.Errorf("contract not found: %w", ErrNotFound)
 	}
 
 	member, err := s.userRepo.IsOrgMember(ctx, userID, c.OrganizationID)
@@ -68,7 +68,7 @@ func (s *EvidenceService) checkEvidenceSetAccess(ctx context.Context, es *model.
 		return fmt.Errorf("check membership: %w", err)
 	}
 	if !member {
-		return fmt.Errorf("access denied")
+		return fmt.Errorf("%w", ErrAccessDenied)
 	}
 	return nil
 }
@@ -100,7 +100,7 @@ func (s *EvidenceService) RetrieveEvidence(ctx context.Context, evidenceSetID st
 		return fmt.Errorf("evidenceService.RetrieveEvidence: %w", err)
 	}
 	if es == nil {
-		return fmt.Errorf("evidenceService.RetrieveEvidence: evidence set not found")
+		return fmt.Errorf("evidenceService.RetrieveEvidence: evidence set not found: %w", ErrNotFound)
 	}
 
 	if err := s.checkEvidenceSetAccess(ctx, es, userID); err != nil {
