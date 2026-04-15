@@ -43,16 +43,16 @@ type ClauseResult struct {
 }
 
 type EvidenceSet struct {
-	ID                 string    `db:"id" json:"id"`
-	ClauseResultID     string    `db:"clause_result_id" json:"clauseResultId"`
-	Rationale          string    `db:"rationale" json:"rationale"`
-	Citations          string    `db:"citations" json:"citations"`
-	RecommendedActions string    `db:"recommended_actions" json:"recommendedActions"`
-	TopK               int       `db:"top_k" json:"topK"`
-	FilterParams       string    `db:"filter_params" json:"filterParams"`
-	RetrievedAt        time.Time `db:"retrieved_at" json:"retrievedAt"`
-	CreatedAt          time.Time `db:"created_at" json:"createdAt"`
-	UpdatedAt          time.Time `db:"updated_at" json:"updatedAt"`
+	ID                 string          `db:"id" json:"id"`
+	ClauseResultID     string          `db:"clause_result_id" json:"clauseResultId"`
+	Rationale          string          `db:"rationale" json:"rationale"`
+	Citations          json.RawMessage `db:"citations" json:"citations"`
+	RecommendedActions json.RawMessage `db:"recommended_actions" json:"recommendedActions"`
+	TopK               int             `db:"top_k" json:"topK"`
+	FilterParams       json.RawMessage `db:"filter_params" json:"filterParams"`
+	RetrievedAt        time.Time       `db:"retrieved_at" json:"retrievedAt"`
+	CreatedAt          time.Time       `db:"created_at" json:"createdAt"`
+	UpdatedAt          time.Time       `db:"updated_at" json:"updatedAt"`
 }
 
 type RiskOverride struct {
