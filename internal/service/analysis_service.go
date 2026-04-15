@@ -47,14 +47,14 @@ func (s *AnalysisService) GetLatestAnalysis(ctx context.Context, contractID, use
 		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: find contract: %w", err)
 	}
 	if c == nil {
-		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: contract not found")
+		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: contract not found: %w", ErrNotFound)
 	}
 	member, err := s.userRepo.IsOrgMember(ctx, userID, c.OrganizationID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: check membership: %w", err)
 	}
 	if !member {
-		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: access denied")
+		return nil, nil, fmt.Errorf("analysisService.GetLatestAnalysis: %w", ErrAccessDenied)
 	}
 
 	a, err := s.analysisRepo.FindLatestAnalysisByContractID(ctx, contractID)
@@ -82,14 +82,14 @@ func (s *AnalysisService) CreateAnalysis(ctx context.Context, contractID, userID
 		return "", fmt.Errorf("analysisService.CreateAnalysis: find contract: %w", err)
 	}
 	if c == nil {
-		return "", fmt.Errorf("analysisService.CreateAnalysis: contract not found")
+		return "", fmt.Errorf("analysisService.CreateAnalysis: contract not found: %w", ErrNotFound)
 	}
 	member, err := s.userRepo.IsOrgMember(ctx, userID, c.OrganizationID)
 	if err != nil {
 		return "", fmt.Errorf("analysisService.CreateAnalysis: check membership: %w", err)
 	}
 	if !member {
-		return "", fmt.Errorf("analysisService.CreateAnalysis: access denied")
+		return "", fmt.Errorf("analysisService.CreateAnalysis: %w", ErrAccessDenied)
 	}
 
 	// Distributed lock to prevent duplicate analyses.
@@ -99,7 +99,7 @@ func (s *AnalysisService) CreateAnalysis(ctx context.Context, contractID, userID
 		return "", fmt.Errorf("analysisService.CreateAnalysis: lock: %w", err)
 	}
 	if !acquired {
-		return "", fmt.Errorf("analysisService.CreateAnalysis: analysis already running for contract %s", contractID)
+		return "", fmt.Errorf("analysisService.CreateAnalysis: analysis already running: %w", ErrConflict)
 	}
 
 	analysisID := util.NewID()
@@ -148,14 +148,14 @@ func (s *AnalysisService) GetAnalysis(ctx context.Context, analysisID, userID st
 		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: find contract: %w", err)
 	}
 	if c == nil {
-		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: contract not found")
+		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: contract not found: %w", ErrNotFound)
 	}
 	member, err := s.userRepo.IsOrgMember(ctx, userID, c.OrganizationID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: check membership: %w", err)
 	}
 	if !member {
-		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: access denied")
+		return nil, nil, fmt.Errorf("analysisService.GetAnalysis: %w", ErrAccessDenied)
 	}
 
 	results, err := s.analysisRepo.ListClauseResultsWithEvidenceByAnalysisID(ctx, analysisID)
@@ -178,7 +178,7 @@ var allowedRiskLevels = map[string]struct{}{
 // that the caller is a member of the analysis's contract organization.
 func (s *AnalysisService) CreateOverride(ctx context.Context, analysisID, clauseResultID, newRiskLevel, reason, userID string) (*model.RiskOverride, error) {
 	if _, ok := allowedRiskLevels[newRiskLevel]; !ok {
-		return nil, fmt.Errorf("analysisService.CreateOverride: invalid risk level %q (must be HIGH, MEDIUM, or LOW)", newRiskLevel)
+		return nil, fmt.Errorf("analysisService.CreateOverride: invalid risk level %q: %w", newRiskLevel, ErrInvalidInput)
 	}
 
 	// Verify the analysis exists.
@@ -187,7 +187,7 @@ func (s *AnalysisService) CreateOverride(ctx context.Context, analysisID, clause
 		return nil, fmt.Errorf("analysisService.CreateOverride: find analysis: %w", err)
 	}
 	if a == nil {
-		return nil, fmt.Errorf("analysisService.CreateOverride: analysis not found")
+		return nil, fmt.Errorf("analysisService.CreateOverride: analysis not found: %w", ErrNotFound)
 	}
 
 	// Verify the caller belongs to the contract's org.
@@ -196,14 +196,14 @@ func (s *AnalysisService) CreateOverride(ctx context.Context, analysisID, clause
 		return nil, fmt.Errorf("analysisService.CreateOverride: find contract: %w", err)
 	}
 	if c == nil {
-		return nil, fmt.Errorf("analysisService.CreateOverride: contract not found")
+		return nil, fmt.Errorf("analysisService.CreateOverride: contract not found: %w", ErrNotFound)
 	}
 	member, err := s.userRepo.IsOrgMember(ctx, userID, c.OrganizationID)
 	if err != nil {
 		return nil, fmt.Errorf("analysisService.CreateOverride: check membership: %w", err)
 	}
 	if !member {
-		return nil, fmt.Errorf("analysisService.CreateOverride: access denied")
+		return nil, fmt.Errorf("analysisService.CreateOverride: %w", ErrAccessDenied)
 	}
 
 	cr, err := s.analysisRepo.FindClauseResultByID(ctx, clauseResultID)
@@ -211,12 +211,12 @@ func (s *AnalysisService) CreateOverride(ctx context.Context, analysisID, clause
 		return nil, fmt.Errorf("analysisService.CreateOverride: find clause result: %w", err)
 	}
 	if cr == nil {
-		return nil, fmt.Errorf("analysisService.CreateOverride: clause result not found")
+		return nil, fmt.Errorf("analysisService.CreateOverride: clause result not found: %w", ErrNotFound)
 	}
 
 	// Verify the clause result belongs to the specified analysis.
 	if cr.AnalysisID != analysisID {
-		return nil, fmt.Errorf("analysisService.CreateOverride: clause result does not belong to analysis")
+		return nil, fmt.Errorf("analysisService.CreateOverride: clause result does not belong to analysis: %w", ErrNotFound)
 	}
 
 	// Always use the AI-assessed risk level as the original, regardless of prior overrides.
