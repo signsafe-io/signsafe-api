@@ -97,11 +97,26 @@ func (r *ContractRepo) ListContracts(ctx context.Context, orgID string, limit, o
 
 	listArgs := append(args, limit, offset)
 	var contracts []model.Contract
+	// Subquery paginates the contracts, then LATERAL JOIN adds the latest
+	// completed overall_risk per contract (null when no completed analysis exists).
 	err := r.db.SelectContext(ctx, &contracts, fmt.Sprintf(`
-		SELECT * FROM contracts
-		WHERE %s
-		ORDER BY created_at DESC
-		LIMIT $%d OFFSET $%d`, whereClause, argIdx, argIdx+1),
+		SELECT c.*,
+		       ra.overall_risk AS latest_analysis_risk
+		FROM (
+		    SELECT * FROM contracts
+		    WHERE %s
+		    ORDER BY created_at DESC
+		    LIMIT $%d OFFSET $%d
+		) c
+		LEFT JOIN LATERAL (
+		    SELECT overall_risk
+		    FROM risk_analyses
+		    WHERE contract_id = c.id
+		      AND status = 'completed'
+		    ORDER BY created_at DESC
+		    LIMIT 1
+		) ra ON true
+		ORDER BY c.created_at DESC`, whereClause, argIdx, argIdx+1),
 		listArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("contractRepo.ListContracts: %w", err)

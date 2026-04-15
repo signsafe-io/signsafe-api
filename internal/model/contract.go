@@ -20,6 +20,9 @@ type Contract struct {
 	ExpiresAt      *time.Time `db:"expires_at" json:"expiresAt"`
 	CreatedAt      time.Time  `db:"created_at" json:"createdAt"`
 	UpdatedAt      time.Time  `db:"updated_at" json:"updatedAt"`
+	// LatestAnalysisRisk is populated only by list queries (LEFT JOIN risk_analyses).
+	// Null when no completed analysis exists for this contract.
+	LatestAnalysisRisk *string `db:"latest_analysis_risk" json:"latestAnalysisRisk,omitempty"`
 }
 
 type IngestionJob struct {
