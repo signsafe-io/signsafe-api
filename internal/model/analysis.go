@@ -1,18 +1,24 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type RiskAnalysis struct {
-	ID           string     `db:"id" json:"id"`
-	ContractID   string     `db:"contract_id" json:"contractId"`
-	RequestedBy  string     `db:"requested_by" json:"requestedBy"`
-	Status       string     `db:"status" json:"status"`
-	ModelVersion *string    `db:"model_version" json:"modelVersion"`
-	ErrorMsg     *string    `db:"error_message" json:"errorMessage"`
-	StartedAt    *time.Time `db:"started_at" json:"startedAt"`
-	CompletedAt  *time.Time `db:"completed_at" json:"completedAt"`
-	CreatedAt    time.Time  `db:"created_at" json:"createdAt"`
-	UpdatedAt    time.Time  `db:"updated_at" json:"updatedAt"`
+	ID              string          `db:"id" json:"id"`
+	ContractID      string          `db:"contract_id" json:"contractId"`
+	RequestedBy     string          `db:"requested_by" json:"requestedBy"`
+	Status          string          `db:"status" json:"status"`
+	ModelVersion    *string         `db:"model_version" json:"modelVersion"`
+	ErrorMsg        *string         `db:"error_message" json:"errorMessage"`
+	StartedAt       *time.Time      `db:"started_at" json:"startedAt"`
+	CompletedAt     *time.Time      `db:"completed_at" json:"completedAt"`
+	DocumentSummary *string         `db:"document_summary" json:"documentSummary,omitempty"`
+	OverallRisk     *string         `db:"overall_risk" json:"overallRisk,omitempty"`
+	KeyIssues       json.RawMessage `db:"key_issues" json:"keyIssues,omitempty"`
+	CreatedAt       time.Time       `db:"created_at" json:"createdAt"`
+	UpdatedAt       time.Time       `db:"updated_at" json:"updatedAt"`
 }
 
 type ClauseResult struct {

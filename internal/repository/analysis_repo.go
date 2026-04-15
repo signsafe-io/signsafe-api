@@ -32,11 +32,19 @@ func (r *AnalysisRepo) CreateAnalysis(ctx context.Context, a *model.RiskAnalysis
 	return nil
 }
 
+const riskAnalysisColumns = `
+	id, contract_id, requested_by, status,
+	model_version, error_message,
+	started_at, completed_at,
+	document_summary, overall_risk, key_issues,
+	created_at, updated_at`
+
 // FindLatestAnalysisByContractID retrieves the most recent risk analysis for a contract.
 func (r *AnalysisRepo) FindLatestAnalysisByContractID(ctx context.Context, contractID string) (*model.RiskAnalysis, error) {
 	var a model.RiskAnalysis
 	err := r.db.GetContext(ctx, &a, `
-		SELECT * FROM risk_analyses
+		SELECT`+riskAnalysisColumns+`
+		FROM risk_analyses
 		WHERE contract_id = $1
 		ORDER BY created_at DESC
 		LIMIT 1`, contractID)
@@ -52,7 +60,10 @@ func (r *AnalysisRepo) FindLatestAnalysisByContractID(ctx context.Context, contr
 // FindAnalysisByID retrieves a risk analysis by ID.
 func (r *AnalysisRepo) FindAnalysisByID(ctx context.Context, id string) (*model.RiskAnalysis, error) {
 	var a model.RiskAnalysis
-	err := r.db.GetContext(ctx, &a, `SELECT * FROM risk_analyses WHERE id = $1`, id)
+	err := r.db.GetContext(ctx, &a, `
+		SELECT`+riskAnalysisColumns+`
+		FROM risk_analyses
+		WHERE id = $1`, id)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
