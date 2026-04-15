@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_risk_analyses_contract_status_created;
