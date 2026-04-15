@@ -92,6 +92,9 @@ func (h *ContractHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	targetType := "contract"
+	logAuditEvent(r, h.auditSvc, "CONTRACT_UPLOADED", &targetType, &result.ContractID, &orgID)
+
 	util.JSON(w, http.StatusCreated, map[string]string{
 		"contractId": result.ContractID,
 		"jobId":      result.JobID,
