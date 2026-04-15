@@ -116,14 +116,14 @@ func (s *ContractService) GetIngestionJob(ctx context.Context, jobID, requestedB
 		return nil, fmt.Errorf("contractService.GetIngestionJob: find contract: %w", err)
 	}
 	if c == nil {
-		return nil, fmt.Errorf("contractService.GetIngestionJob: contract not found")
+		return nil, fmt.Errorf("contractService.GetIngestionJob: contract not found: %w", ErrNotFound)
 	}
 	member, err := s.userRepo.IsOrgMember(ctx, requestedBy, c.OrganizationID)
 	if err != nil {
 		return nil, fmt.Errorf("contractService.GetIngestionJob: check membership: %w", err)
 	}
 	if !member {
-		return nil, fmt.Errorf("contractService.GetIngestionJob: access denied")
+		return nil, fmt.Errorf("contractService.GetIngestionJob: %w", ErrAccessDenied)
 	}
 
 	return job, nil
@@ -137,7 +137,7 @@ func (s *ContractService) ListIngestionJobsByContract(ctx context.Context, contr
 		return nil, fmt.Errorf("contractService.ListIngestionJobsByContract: find contract: %w", err)
 	}
 	if c == nil {
-		return nil, fmt.Errorf("contractService.ListIngestionJobsByContract: contract not found")
+		return nil, fmt.Errorf("contractService.ListIngestionJobsByContract: contract not found: %w", ErrNotFound)
 	}
 
 	member, err := s.userRepo.IsOrgMember(ctx, requestedBy, c.OrganizationID)
@@ -145,7 +145,7 @@ func (s *ContractService) ListIngestionJobsByContract(ctx context.Context, contr
 		return nil, fmt.Errorf("contractService.ListIngestionJobsByContract: check membership: %w", err)
 	}
 	if !member {
-		return nil, fmt.Errorf("contractService.ListIngestionJobsByContract: access denied")
+		return nil, fmt.Errorf("contractService.ListIngestionJobsByContract: %w", ErrAccessDenied)
 	}
 
 	jobs, err := s.repo.ListIngestionJobsByContractID(ctx, contractID)
@@ -257,7 +257,7 @@ func (s *ContractService) UpdateContract(ctx context.Context, contractID, reques
 		return nil, fmt.Errorf("contractService.UpdateContract: %w", err)
 	}
 	if c == nil {
-		return nil, fmt.Errorf("contractService.UpdateContract: contract not found")
+		return nil, fmt.Errorf("contractService.UpdateContract: contract not found: %w", ErrNotFound)
 	}
 
 	member, err := s.userRepo.IsOrgMember(ctx, requestedBy, c.OrganizationID)
@@ -265,7 +265,7 @@ func (s *ContractService) UpdateContract(ctx context.Context, contractID, reques
 		return nil, fmt.Errorf("contractService.UpdateContract: check membership: %w", err)
 	}
 	if !member {
-		return nil, fmt.Errorf("contractService.UpdateContract: access denied")
+		return nil, fmt.Errorf("contractService.UpdateContract: %w", ErrAccessDenied)
 	}
 
 	updates := repository.ContractUpdate{
@@ -308,7 +308,7 @@ func (s *ContractService) DeleteContract(ctx context.Context, contractID, reques
 		return fmt.Errorf("contractService.DeleteContract: %w", err)
 	}
 	if c == nil {
-		return fmt.Errorf("contractService.DeleteContract: contract not found")
+		return fmt.Errorf("contractService.DeleteContract: contract not found: %w", ErrNotFound)
 	}
 
 	member, err := s.userRepo.IsOrgMember(ctx, requestedBy, c.OrganizationID)
@@ -316,7 +316,7 @@ func (s *ContractService) DeleteContract(ctx context.Context, contractID, reques
 		return fmt.Errorf("contractService.DeleteContract: check membership: %w", err)
 	}
 	if !member {
-		return fmt.Errorf("contractService.DeleteContract: access denied")
+		return fmt.Errorf("contractService.DeleteContract: %w", ErrAccessDenied)
 	}
 
 	// Delete from storage (best-effort; DB row is the authoritative record).
@@ -341,7 +341,7 @@ func (s *ContractService) GetFile(ctx context.Context, contractID string) (io.Re
 		return nil, "", fmt.Errorf("contractService.GetFile: %w", err)
 	}
 	if c == nil {
-		return nil, "", fmt.Errorf("contractService.GetFile: contract not found")
+		return nil, "", fmt.Errorf("contractService.GetFile: contract not found: %w", ErrNotFound)
 	}
 
 	body, err := s.storageClient.Get(ctx, c.FilePath)
